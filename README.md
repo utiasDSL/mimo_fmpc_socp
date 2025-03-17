@@ -1,11 +1,11 @@
 # Multi-input Second Order Cone Safety Filtering for Constrained Learning-based Flat Model Predictive Control
 This repo contains the code to reproduce the experiments in the paper "Multi-input Second Order Cone Safety Filtering for Constrained Learning-based Flat Model Predictive Control".
 
-<img src="figures/block_diagram.png" alt="block diagram" width="800">
+<img src="figures/blockdiagram.png" alt="block diagram" width="800">
 
 Learning-based control techniques are used to control systems with uncertain dynamics by leveraging data from past trajectories to learn a system model. However, learning-based controllers are often computationally inefficient, limiting their use in practice. To address this limitation, we propose a learning-based controller that exploits differential flatness—a structural property of many useful systems—for the efficient control of general nonlinear affine multi-input differentially flat systems. Recent research on exploiting flatness for learning-based control either doesn’t  account for input constraints, is only formulated for single-input systems, or is specialized for a specific system (i.e., a quadrotor). In contrast, our approach uses a safety filter that guarantees probabilistic asymptotic stability, probabilistic flat state constraint satisfaction, and can account for constraints on the system input. Additionally, our proposed controller is composed of two sequential convex optimizations, enabling efficient control while relying solely on learned dynamics. Using a quadrotor simulation, we show that our approach achieves similar performance as a nonlinear model predictive controller that has perfect knowledge of the system dynamics, validating the functionality of our approach for learning-based control.
 
-This code is based on [safe-control-gym](https://github.com/utiasDSL/safe-control-gym/). The GP implementation with 
+This code is based on [safe-control-gym](https://github.com/utiasDSL/safe-control-gym/). The GP implementation with affine kernel is based on [fmpc_socp](https://github.com/utiasDSL/fmpc_socp)
 
 ## Install on Ubuntu/macOS
 For detailed instructions see the [safe-control-gym](https://github.com/utiasDSL/safe-control-gym/) README
@@ -26,9 +26,6 @@ conda activate safe
 ```
 
 ### Install
-
-Install the `safe-control-gym` repository
-
 ```bash
 python -m pip install --upgrade pip
 python -m pip install -e .
@@ -71,15 +68,19 @@ The dynamics simulation is done using the symbolic model of the 2d quadrotor. Th
 We give the reference to FMPC and our proposed approach as a full flat state reference and to NMPC as a position and velocity reference. 
 
 The cost function matrices of FMPC and our proposed approach are: 
-$$
-\bm{Q} = diag(50, 0.001, 0.1, 0.001, 50 , 0.001, 0.1, 0.001), 
-\bm{R} = diag(1.0e-6, 1.0e-6)
-$$
+Q = diag(50, 0.001, 0.1, 0.001, 50 , 0.001, 0.1, 0.001), 
+R = diag(1.0e-6, 1.0e-6)
+
 The cost function matrices of NMPC are: 
-$$
-\bm{Q} = diag(5, 0.1, 5, 0.1, 0.1, 0.1), 
-\bm{R} = diag(0.1, 0.1)
-$$
+Q = diag(5, 0.1, 5, 0.1, 0.1, 0.1), 
+R = diag(0.1, 0.1)
+
+Other parameters are set to:
+- lower constraint on extended input (-10, -1.5)
+- upper constraint on extended input (10, 1.5)
+- sqrt(beta): 2
+- quantile in L_i: 2
+- quantile in State Constraint: 3
 
 ## GP Training
 To get the GP training data
