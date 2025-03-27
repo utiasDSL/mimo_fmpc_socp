@@ -27,4 +27,9 @@ algo_config:
     apply_state_bound: True  
     h_vect: [-1, 0, 0, 0, 0, 0, 0, 0]
     b_val: 0.8
-    
+
+  extended_input_clipping:
+    apply_input_clipping: False  
+    # input_limit:
+    # - 10
+    # - 1.5   

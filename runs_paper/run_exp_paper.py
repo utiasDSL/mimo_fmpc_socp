@@ -32,6 +32,9 @@ if args.mode == 'normal':
     SHADE_STATE_CONSTRAINT = False
     SHADE_INPUT_CONSTRAINT = False
     SHOW_FMPC = True
+    RUN_NMPC=True
+    RUN_FMPC=True
+    RUN_FMPC_SOCP=True
 
 elif args.mode == 'constrained':
     print("Running constrained lemniscate.")
@@ -42,13 +45,16 @@ elif args.mode == 'constrained':
     SHADE_STATE_CONSTRAINT = True
     SHADE_INPUT_CONSTRAINT = True
     SHOW_FMPC = False
+    RUN_NMPC=True
+    RUN_FMPC=False
+    RUN_FMPC_SOCP=True
 
 
 
 ######### Parameters ###############################
-RUN_NMPC=True
-RUN_FMPC=True
-RUN_FMPC_SOCP=True
+# RUN_NMPC=True
+# RUN_FMPC=True
+# RUN_FMPC_SOCP=True
 
 GUI = False
 

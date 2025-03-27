@@ -41,6 +41,7 @@ class FlatMPC_EXT(BaseController):
             additional_constraints=None,
             use_acados=False,
             flat_state_constraint = dict,
+            extended_input_clipping = dict,
             **kwargs):
         '''Creates task and controller.
 
@@ -59,6 +60,7 @@ class FlatMPC_EXT(BaseController):
             additional_constraints (list): list of constraints.
             use_acados: use acados linear MPC or CasADi linear MPC
             flat_state_constraint: dict with parameters for flat half space constraint
+            extended_input_clipping: dict with limits to clip extended input with
         '''
         # Store all params/args.
         for k, v in locals().items():
@@ -146,6 +148,10 @@ class FlatMPC_EXT(BaseController):
         B_dyn_ext[1, 0] = 1.0
         self.Ad_dyn_ext, self.Bd_dyn_ext = discretize_linear_system(A_dyn_ext, B_dyn_ext, self.mpc.dt, exact=True)
 
+        # setup input clipping
+        self.extended_input_clipping = extended_input_clipping.apply_input_clipping
+        if self.extended_input_clipping:
+            self.input_limit = np.array(extended_input_clipping.input_limit)
 
     def reset(self):
         '''Prepares for training or evaluation.'''
@@ -224,6 +230,8 @@ class FlatMPC_EXT(BaseController):
         zd = z_horizon[:, 0]
         vd = v_horizon[:, 0]
         action_extended = _get_u_from_flat_states_2D_att_ext(zd, vd, self.inertial_prop, self.mpc.env.GRAVITY_ACC) # for dynamics with system extension
+        if self.extended_input_clipping:
+            action_extended = np.clip(action_extended, -self.input_limit, self.input_limit)
        
         # do double integration on first action Tc_ddot --> Tc
         self.eta = self.Ad_dyn_ext @ self.eta + self.Bd_dyn_ext @ action_extended
