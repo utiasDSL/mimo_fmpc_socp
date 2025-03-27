@@ -31,6 +31,7 @@ if args.mode == 'normal':
     yaml_file_fmpc_socp = './config_overrides_fast/fmpc_socp_quadrotor_2D_attitude_tracking.yaml'
     SHADE_STATE_CONSTRAINT = False
     SHADE_INPUT_CONSTRAINT = False
+    SHOW_FMPC = True
 
 elif args.mode == 'constrained':
     print("Running constrained lemniscate.")
@@ -40,12 +41,13 @@ elif args.mode == 'constrained':
     yaml_file_fmpc_socp = './config_overrides_constrained/fmpc_socp_quadrotor_2D_attitude_tracking.yaml'
     SHADE_STATE_CONSTRAINT = True
     SHADE_INPUT_CONSTRAINT = True
+    SHOW_FMPC = False
 
 
 
 ######### Parameters ###############################
-RUN_NMPC=False
-RUN_FMPC=False
+RUN_NMPC=True
+RUN_FMPC=True
 RUN_FMPC_SOCP=True
 
 GUI = False
@@ -130,16 +132,19 @@ def extract_data(data_file):
 
     ctrl_data = traj_data['controller_data'][0]
     if 'u_ext' in ctrl_data:
-        action_ext = np.array(ctrl_data['u_ext'][0]) # FMPC
-    elif 'u_extSOCP' in ctrl_data:
-        action_ext = np.array(ctrl_data['u_extSOCP'][0]) # FMPC_SOCP
+        action_ext = 0 #np.array(ctrl_data['u_ext'][0]) # FMPC
+        gp_time = 0
+    elif 'u_extSOCP' in ctrl_data: # or 'gp_time' in ctrl_data:
+        action_ext = 0 #np.array(ctrl_data['u_extSOCP'][0]) # FMPC_SOCP
+        gp_time = np.array(ctrl_data['gp_time'][0])
     else:
         action_ext = 0
-    return states, error, inference_time, rmse, state_ref, action, action_ext
+        gp_time = 0
+    return states, error, inference_time, rmse, state_ref, action, action_ext, gp_time
 
-state_mpc, error_mpc, inf_time_mpc, rmse_mpc, state_ref_mpc, action_mpc, _ = extract_data(data_path_nmpc)
-state_x_fmpc, error_fmpc, inf_time_fmpc, rmse_fmpc, state_ref_fmpc, action_fmpc, action_ext_fmpc = extract_data(data_path_fmpc) 
-state_x_fmpc_socp, error_fmpc_socp, inf_time_fmpc_socp, rmse_fmpc_socp, state_ref_fmpc_socp, action_fmpc_socp, action_ext_fmpc_socp = extract_data(data_path_fmpc_socp)   
+state_mpc, error_mpc, inf_time_mpc, rmse_mpc, state_ref_mpc, action_mpc, _ , _= extract_data(data_path_nmpc)
+state_x_fmpc, error_fmpc, inf_time_fmpc, rmse_fmpc, state_ref_fmpc, action_fmpc, action_ext_fmpc, dummy = extract_data(data_path_fmpc) 
+state_x_fmpc_socp, error_fmpc_socp, inf_time_fmpc_socp, rmse_fmpc_socp, state_ref_fmpc_socp, action_fmpc_socp, action_ext_fmpc_socp, gp_time_socp = extract_data(data_path_fmpc_socp)   
 
 
 
@@ -188,7 +193,8 @@ limits_y = [0.4, 1.6]
 plt.figure(figsize=(fig_width, fig_height))
 plt.plot(state_ref_mpc[0, :301, 0, 0], state_ref_mpc[0, :301, 2, 0], linestyle = 'dashed', color=ref_color, label=ref_label, linewidth=linewidth, alpha=alpha_lines)
 plt.plot(state_mpc[:, 0], state_mpc[:, 2], color=mpc_color, label=mpc_label, linewidth=linewidth, alpha=alpha_lines)
-plt.plot(state_x_fmpc[:, 0], state_x_fmpc[:, 2], color=fmpc_color, label=fmpc_label, linewidth=linewidth, alpha=alpha_lines)
+if SHOW_FMPC:
+    plt.plot(state_x_fmpc[:, 0], state_x_fmpc[:, 2], color=fmpc_color, label=fmpc_label, linewidth=linewidth, alpha=alpha_lines)
 plt.plot(state_x_fmpc_socp[:, 0], state_x_fmpc_socp[:, 2], color=fmpc_socp_color, label=fmpc_socp_label, linewidth=linewidth, alpha=alpha_lines)
 # plt.legend()
 plt.xlabel(r'Position x (m)')
@@ -235,18 +241,20 @@ print('      average RMSE: {:.2f}mm | {:.2f}mm | {:.2f}mm'.format(rmse_mpc*1000,
 
 ##################################################################################
 # Inputs
-limits_y1 = [0, 0.65]
+limits_y1 = [0, 0.55] #[0, 0.65]
 time = np.arange(0, np.shape(action_mpc)[0]*sample_time, sample_time )
 fig, ax = plt.subplots(2, figsize=(fig_width, fig_height))
 ax[0].plot(time, action_mpc[:, 0], color=mpc_color, label=mpc_label, linewidth=linewidth, alpha=alpha_lines)
-ax[0].plot(time, action_fmpc[:, 0], color=fmpc_color, label=fmpc_label, linewidth=linewidth, alpha=alpha_lines)
+if SHOW_FMPC:
+    ax[0].plot(time, action_fmpc[:, 0], color=fmpc_color, label=fmpc_label, linewidth=linewidth, alpha=alpha_lines)
 ax[0].plot(time, action_fmpc_socp[:, 0], color=fmpc_socp_color, label=fmpc_socp_label, linewidth=linewidth, alpha=alpha_lines)
 ax[0].set_ylabel(r'Thrust $T_c$ (N)')
 ax[0].set_ylim(limits_y1)
 # ax[0].legend()
 ax[0].grid()
 ax[1].plot(time, action_mpc[:, 1], color=mpc_color, label=mpc_label, linewidth=linewidth, alpha=alpha_lines)
-ax[1].plot(time, action_fmpc[:, 1], color=fmpc_color, label=fmpc_label, linewidth=linewidth, alpha=alpha_lines)
+if SHOW_FMPC:
+    ax[1].plot(time, action_fmpc[:, 1], color=fmpc_color, label=fmpc_label, linewidth=linewidth, alpha=alpha_lines)
 ax[1].plot(time, action_fmpc_socp[:, 1], color=fmpc_socp_color, label=fmpc_socp_label, linewidth=linewidth, alpha=alpha_lines)
 ax[1].set_ylabel(r'Angle $\theta_c$ (rad)')
 ax[1].grid()
@@ -255,24 +263,10 @@ if SHADE_INPUT_CONSTRAINT:
     ax[0].axhspan(constraint_input, limits_y1[1], color=tum_dia_red, alpha=alpha_constraint)
 plt.savefig("./plots/inputs.pdf", format="pdf", bbox_inches="tight")
 
-# # Tc_ddot in Flatness based controllers
-# time = np.arange(0, np.shape(action_ext_fmpc)[0]*sample_time, sample_time )
-# plt.figure(figsize=(fig_width, fig_height))
-# # plt.plot(time, np.sqrt(error_mpc), color=mpc_color, label=mpc_label, linewidth=linewidth)
-# plt.plot(time, action_ext_fmpc[:, 0], color=fmpc_color, label=fmpc_label, linewidth=linewidth, alpha=alpha_lines)
-# plt.plot(time, action_ext_fmpc_socp[:, 0], color=fmpc_socp_color, label=fmpc_socp_label, linewidth=linewidth, alpha=alpha_lines)
-# plt.legend()
-# plt.xlabel('time in s')
-# plt.ylabel(r'$\ddot{T_c}$ in $\frac{N}{s^2}$')
-# plt.grid()
 print('\nMaximum of inputs')
 print('               NMPC   |  FMPC   | FMPC+SOCP')
 print('Thrust: {:.5f}N   | {:.5f}N   | {:.5f}N'.format(np.max(action_mpc[:, 0]), np.max(action_fmpc[:, 0]), np.max(action_fmpc_socp[:, 0])))
 print(' Angle: {:.2f}rad | {:.2f}rad | {:.2f}rad'.format(np.max(action_mpc[:, 1]), np.max(action_fmpc[:, 1]), np.max(action_fmpc_socp[:, 1])))
-
-print('\nMaximum of extended input')
-print('               NMPC   |  FMPC   | FMPC+SOCP')
-print('Thrust_ddot: ------  | {:.2f}N/s^2 | {:.2f}N/s^2'.format(np.max(action_ext_fmpc[:, 0]), np.max(action_ext_fmpc_socp[:, 0])))
 
 
 ##################################################################################
@@ -292,6 +286,9 @@ print('               NMPC   |  FMPC   | FMPC+SOCP')
 print('average time: {:.2f}ms | {:.2f}ms | {:.2f}ms'.format(np.mean(inf_time_mpc)*1000, np.mean(inf_time_fmpc)*1000, np.mean(inf_time_fmpc_socp)*1000))
 print('maximum time: {:.2f}ms | {:.2f}ms | {:.2f}ms'.format(np.max(inf_time_mpc)*1000, np.max(inf_time_fmpc)*1000, np.max(inf_time_fmpc_socp)*1000))
 
+print('GP inference time')
+print('average: {:.2f}ms'.format(np.mean(gp_time_socp)*1000))
+
 
 ######################################################################################
 print('Velocities of the quadrotor along the trajectory')
@@ -299,17 +296,6 @@ print('Velocities of the quadrotor along the trajectory')
 vel_mpc = np.sqrt(state_mpc[:, 1]**2 + state_mpc[:, 3]**2)
 vel_fmpc = np.sqrt(state_x_fmpc[:, 1]**2 + state_x_fmpc[:, 3]**2)
 vel_fmpc_socp = np.sqrt(state_x_fmpc_socp[:, 1]**2 + state_x_fmpc_socp[:, 3]**2)
-
-# plot velocity over time
-# time = np.arange(0, np.shape(error_mpc)[0]*sample_time, sample_time )
-# plt.figure()
-# plt.plot(time, vel_mpc, color=mpc_color, label=mpc_label, linewidth=linewidth)
-# plt.plot(time, vel_fmpc, color=fmpc_color, label=fmpc_label, linewidth=linewidth)
-# plt.plot(time, vel_fmpc_socp, color=fmpc_socp_color, label=fmpc_socp_label, linewidth=linewidth)
-# plt.legend()
-# plt.xlabel('time in s')
-# plt.ylabel('velocity in m/s')
-# plt.grid()
 
 print('\nVelocity on trajectory')
 print('                   NMPC   |  FMPC   | FMPC+SOCP')
@@ -321,5 +307,3 @@ print('maximum velocity: {:.2f}m/s | {:.2f}m/s | {:.2f}m/s'.format(np.max(vel_mp
 
 
 plt.show()
-
-dummy = 0

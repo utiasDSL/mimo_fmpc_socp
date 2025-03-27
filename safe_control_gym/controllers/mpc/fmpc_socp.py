@@ -299,7 +299,8 @@ class FlatMPC_SOCP(BaseController):
                              'socp_cost':[],
                              'socp_cost_linPart':[],  
                              'socp_solve_time':[],
-                             'thrust_dot':[],                           
+                             'thrust_dot':[], 
+                             'gp_time':[],                          
                              }
         
     def select_action(self,
@@ -342,22 +343,23 @@ class FlatMPC_SOCP(BaseController):
         # feed data into observer
         self.fs_obs.input_FMPC_result(z_horizon, v_horizon, action)
 
-        # # data logging
-        self.results_dict['obs_z'].append(z_obs)
-        self.results_dict['u'].append(action)       
-        self.results_dict['u_extFT'].append(action_extended)
+        # data logging
+        # self.results_dict['obs_z'].append(z_obs)
+        # self.results_dict['u'].append(action)       
+        # self.results_dict['u_extFT'].append(action_extended)
         self.results_dict['u_extSOCP'].append(action_extended_socp)
-        self.results_dict['gp_means'].append(socp_logging['means'])
-        self.results_dict['gp_covs'].append(socp_logging['covs'])
-        self.results_dict['v_des'].append(vd)
-        self.results_dict['socp_slack'].append(self.socp_opt[3])
-        self.results_dict['socp_slack2'].append(self.socp_opt[4])
-        self.results_dict['socp_slack3'].append(self.socp_opt[5])
-        self.results_dict['socp_dummy'].append(self.socp_opt[2])
-        self.results_dict['socp_cost'].append(socp_logging['cost'])
-        self.results_dict['socp_cost_linPart'].append(socp_logging['cost_lin'])
-        self.results_dict['socp_solve_time'].append(socp_logging['solve_time'])
-        self.results_dict['thrust_dot'].append(self.eta[1])
+        # self.results_dict['gp_means'].append(socp_logging['means'])
+        # self.results_dict['gp_covs'].append(socp_logging['covs'])
+        # self.results_dict['v_des'].append(vd)
+        # self.results_dict['socp_slack'].append(self.socp_opt[3])
+        # self.results_dict['socp_slack2'].append(self.socp_opt[4])
+        # self.results_dict['socp_slack3'].append(self.socp_opt[5])
+        # self.results_dict['socp_dummy'].append(self.socp_opt[2])
+        # self.results_dict['socp_cost'].append(socp_logging['cost'])
+        # self.results_dict['socp_cost_linPart'].append(socp_logging['cost_lin'])
+        # self.results_dict['socp_solve_time'].append(socp_logging['solve_time'])
+        # self.results_dict['thrust_dot'].append(self.eta[1])
+        self.results_dict['gp_time'].append(socp_logging['gp_time'])
         
         return action
     

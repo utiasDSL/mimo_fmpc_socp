@@ -2,6 +2,7 @@ import numpy as np
 from numpy.linalg import norm
 import cvxpy as cp
 import torch
+from time import time
 
 # for testing on its own
 import os
@@ -143,8 +144,11 @@ class DiscreteSOCPFilter:
         gam5 = []
         L_gam5 = []
         Linv_gam5 = []
+        gp_time = []
         for i in [0, 1]: #range(len(gp_models)):
+            start_time = time()
             gamma1, gamma2, gamma3, gamma4, gamma5 = get_gammas(z_query, self.gps[i])
+            gp_time.append(time()-start_time)
             L_chol = np.linalg.cholesky(gamma5)
             L_chol_inv = np.linalg.inv(L_chol)
             gam1.append(gamma1)
@@ -154,6 +158,8 @@ class DiscreteSOCPFilter:
             gam5.append(gamma5)
             L_gam5.append(L_chol)
             Linv_gam5.append(L_chol_inv)
+        
+        gp_time_total = gp_time[0] + gp_time[1]
 
         # Compute cost coefficients
         cost = compute_cost(gam1, gam2, gam4, v_des)
@@ -238,24 +244,25 @@ class DiscreteSOCPFilter:
         if 'optimal' in self.prob.status:
             success = True
             # debugging: compute the covariance at this input u: just sample from GP
-            u_opt = self.X.value[0:2]
-            mean0 = gam1[0] + gam2[0].T@u_opt
-            cov0 = gam3[0] + gam4[0].T@u_opt + u_opt.T@gam5[0]@u_opt
-            mean1 = gam1[1] + gam2[1].T@u_opt
-            cov1 = gam3[1] + gam4[1].T@u_opt + u_opt.T@gam5[1]@u_opt
-            means = [mean0, mean1]
-            covs = [cov0, cov1]
-            cost_val = self.cost.value@self.X.value
-            cost_val_lin_part = self.cost.value[0, 0]*self.X.value[0] + self.cost.value[0, 1]*self.X.value[1]
-            solve_time = self.prob.solver_stats.solve_time
-            logging_dict['means'] = means
-            logging_dict['covs'] = covs
-            logging_dict['cost'] = cost_val
-            logging_dict['cost_lin'] = cost_val_lin_part
+            # u_opt = self.X.value[0:2]
+            # mean0 = gam1[0] + gam2[0].T@u_opt
+            # cov0 = gam3[0] + gam4[0].T@u_opt + u_opt.T@gam5[0]@u_opt
+            # mean1 = gam1[1] + gam2[1].T@u_opt
+            # cov1 = gam3[1] + gam4[1].T@u_opt + u_opt.T@gam5[1]@u_opt
+            # means = [mean0, mean1]
+            # covs = [cov0, cov1]
+            # cost_val = self.cost.value@self.X.value
+            # cost_val_lin_part = self.cost.value[0, 0]*self.X.value[0] + self.cost.value[0, 1]*self.X.value[1]
+            # solve_time = self.prob.solver_stats.solve_time
+            # logging_dict['means'] = means
+            # logging_dict['covs'] = covs
+            # logging_dict['cost'] = cost_val
+            # logging_dict['cost_lin'] = cost_val_lin_part
             # logging_dict['q_dummy_val'] = self.X.value[2] # take from X.value directly in fmpc_socp
             # logging_dict['d1_slack'] = self.X.value[3]
             # logging_dict['d2_slack'] = self.X.value[4]
-            logging_dict['solve_time'] = solve_time
+            # logging_dict['solve_time'] = solve_time
+            logging_dict['gp_time'] = gp_time
 
             return self.X.value[0:2]*self.norm_u, success, self.X.value, logging_dict   
         
