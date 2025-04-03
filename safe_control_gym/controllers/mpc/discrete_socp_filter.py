@@ -262,7 +262,7 @@ class DiscreteSOCPFilter:
             # logging_dict['d1_slack'] = self.X.value[3]
             # logging_dict['d2_slack'] = self.X.value[4]
             # logging_dict['solve_time'] = solve_time
-            logging_dict['gp_time'] = gp_time
+            logging_dict['gp_time'] = gp_time_total
 
             return self.X.value[0:2]*self.norm_u, success, self.X.value, logging_dict   
         
