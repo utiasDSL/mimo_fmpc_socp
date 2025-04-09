@@ -146,6 +146,7 @@ class MPC(BaseController):
         self.x_prev = None
         self.u_prev = None
         self.prev_action = np.array(((self.env.GRAVITY_ACC - self.env.INERTIAL_PROP['beta_2'])/self.env.INERTIAL_PROP['beta_1'], 0))
+        self.prev_prev_action = np.array(((self.env.GRAVITY_ACC - self.env.INERTIAL_PROP['beta_2'])/self.env.INERTIAL_PROP['beta_1'], 0))
 
         self.setup_results_dict()
 
@@ -208,11 +209,15 @@ class MPC(BaseController):
             u_var = opti_dict['u_var']  # optimization variables
             x_init = opti_dict['x_init']  # initial state
             x_ref = opti_dict['x_ref']  # reference state/trajectory
+            prev_thrust = opti_dict['prev_thrust']
+            prev_prev_thrust = opti_dict['prev_prev_thrust']
 
             # Assign the initial state.
             opti.set_value(x_init, init_state)  # initial state should have dim (nx,)
             # Assign reference trajectory within horizon.
             opti.set_value(x_ref, goal_states)
+            opti.set_value(prev_thrust, self.prev_action[0])
+            opti.set_value(prev_prev_thrust, self.prev_prev_action[0])
             # Solve the optimization problem.
             try:
                 sol = opti.solve()
@@ -262,6 +267,10 @@ class MPC(BaseController):
         state_slack = opti.variable(len(self.state_constraints_sym))
         input_slack = opti.variable(len(self.input_constraints_sym))
 
+        # for thrust_ddot constraint
+        prev_thrust = opti.parameter(1, 1)
+        prev_prev_thrust = opti.parameter(1, 1)
+
         # cost (cumulative)
         cost = 0
         cost_func = self.model.loss
@@ -309,6 +318,15 @@ class MPC(BaseController):
                 opti.subject_to(state_slack[sc_i] >= 0)
             else:
                 opti.subject_to(state_constraint(x_var[:, -1]) <= -self.constraint_tol)
+
+        # Thrust_ddot constraints
+        thrust_ddot_max = 10
+        dt = self.dt
+        opti.subject_to((prev_thrust-2*u_var[0, 0] + u_var[0, 1]) <= (thrust_ddot_max*(dt**2)))
+        opti.subject_to((prev_thrust-2*u_var[0, 0] + u_var[0, 1]) >= - (thrust_ddot_max*(dt**2)))
+        for i in range(1, T-1):
+            opti.subject_to((u_var[0, i-1]-2*u_var[0, i] + u_var[0, i+1]) <= (thrust_ddot_max*(dt**2)))
+            opti.subject_to((u_var[0, i-1]-2*u_var[0, i] + u_var[0, i+1]) >= - (thrust_ddot_max*(dt**2)))
         # initial condition constraints
         opti.subject_to(x_var[:, 0] == x_init)
 
@@ -323,7 +341,9 @@ class MPC(BaseController):
             'u_var': u_var,
             'x_init': x_init,
             'x_ref': x_ref,
-            'cost': cost
+            'cost': cost, 
+            'prev_thrust': prev_thrust, 
+            'prev_prev_thrust': prev_prev_thrust
         }
 
     @timing
@@ -346,12 +366,17 @@ class MPC(BaseController):
         u_var = opti_dict['u_var']  # optimization variables
         x_init = opti_dict['x_init']  # initial state
         x_ref = opti_dict['x_ref']  # reference state/trajectory
+        prev_thrust = opti_dict['prev_thrust']
+        prev_prev_thrust = opti_dict['prev_prev_thrust']
 
         # Assign the initial state.
         opti.set_value(x_init, obs)
         # Assign reference trajectory within horizon.
         goal_states = self.get_references()
         opti.set_value(x_ref, goal_states)
+
+        opti.set_value(prev_thrust, self.prev_action[0])
+        opti.set_value(prev_prev_thrust, self.prev_prev_action[0])
 
         if self.compute_initial_guess_method is not None and self.x_prev is None and self.u_prev is None:
             x_guess, u_guess = self.compute_initial_guess(obs)
@@ -410,6 +435,7 @@ class MPC(BaseController):
             action = np.array([u_val[0]])
         if self.use_lqr_gain_and_terminal_cost:
             action += self.lqr_gain @ (obs - x_val[:, 0])
+        self.prev_prev_action = self.prev_action
         self.prev_action = action
         return action
     @timing
