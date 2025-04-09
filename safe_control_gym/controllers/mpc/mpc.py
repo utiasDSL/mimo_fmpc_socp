@@ -327,6 +327,10 @@ class MPC(BaseController):
         for i in range(1, T-1):
             opti.subject_to((u_var[0, i-1]-2*u_var[0, i] + u_var[0, i+1]) <= (thrust_ddot_max*(dt**2)))
             opti.subject_to((u_var[0, i-1]-2*u_var[0, i] + u_var[0, i+1]) >= - (thrust_ddot_max*(dt**2)))
+        
+        opti.subject_to((prev_prev_thrust-2*prev_thrust + u_var[0, 0]) <= (thrust_ddot_max*(dt**2)))
+        opti.subject_to((prev_prev_thrust-2*prev_thrust + u_var[0, 0]) >= - (thrust_ddot_max*(dt**2)))
+
         # initial condition constraints
         opti.subject_to(x_var[:, 0] == x_init)
 
