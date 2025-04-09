@@ -215,7 +215,7 @@ plt.ylim(limits_y)
 plt.grid()
 if SHADE_STATE_CONSTRAINT:
     plt.axvspan(limits_x[0], constraint_state, color=tum_dia_red, alpha=alpha_constraint)
-plt.savefig("./plots/fig8.pdf", format="pdf", bbox_inches=None)
+plt.savefig("./plots_thesis/fig8.pdf", format="pdf", bbox_inches=None)
 
 # plot errors over time
 time = np.arange(0, np.shape(error_mpc)[0]*sample_time, sample_time )
