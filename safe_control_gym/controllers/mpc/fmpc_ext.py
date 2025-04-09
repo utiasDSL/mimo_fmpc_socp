@@ -202,7 +202,8 @@ class FlatMPC_EXT(BaseController):
                              't_wall': [],
                             'z_inp':[],
                             'v_inp':[],
-                            'u_ext':[]
+                            'u_ext':[], 
+                            'thrust_dot':[]
                              }
 
     def select_action(self,
@@ -246,6 +247,7 @@ class FlatMPC_EXT(BaseController):
         self.results_dict['z_inp'].append(zd)
         self.results_dict['v_inp'].append(vd)
         self.results_dict['u_ext'].append(action_extended)
+        self.results_dict['thrust_dot'].append(self.eta[1])
         
         return action
     

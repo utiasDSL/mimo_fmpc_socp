@@ -145,6 +145,7 @@ class MPC(BaseController):
         # Previously solved states & inputs, useful for warm start.
         self.x_prev = None
         self.u_prev = None
+        self.prev_action = np.array(((self.env.GRAVITY_ACC - self.env.INERTIAL_PROP['beta_2'])/self.env.INERTIAL_PROP['beta_1'], 0))
 
         self.setup_results_dict()
 
@@ -400,6 +401,8 @@ class MPC(BaseController):
         self.results_dict['goal_states'].append(deepcopy(goal_states))
         if self.solver == 'ipopt':
             self.results_dict['t_wall'].append(opti.stats()['t_wall_total'])
+        self.results_dict['thrust_ddot'].append((self.prev_action[0]-2*u_val[0, 0] + u_val[0, 1])/(self.dt**2))
+        self.results_dict['thrust_dot'].append((-self.prev_action[0]+u_val[0, 0])/self.dt)
         # Take the first action from the solved action sequence.
         if u_val.ndim > 1:
             action = u_val[:, 0]
@@ -455,7 +458,9 @@ class MPC(BaseController):
                              'common_cost': [],
                              'state': [],
                              'state_error': [],
-                             't_wall': []
+                             't_wall': [], 
+                             'thrust_ddot':[], 
+                             'thrust_dot':[]
                              }
 
     def run(self,

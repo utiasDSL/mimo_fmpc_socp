@@ -52,9 +52,9 @@ elif args.mode == 'constrained':
 
 
 ######### Parameters ###############################
-# RUN_NMPC=True
-# RUN_FMPC=True
-# RUN_FMPC_SOCP=True
+RUN_NMPC=False
+RUN_FMPC=False
+RUN_FMPC_SOCP=False
 
 GUI = False
 
@@ -138,19 +138,23 @@ def extract_data(data_file):
 
     ctrl_data = traj_data['controller_data'][0]
     if 'u_ext' in ctrl_data:
-        action_ext = 0 #np.array(ctrl_data['u_ext'][0]) # FMPC
+        thrust_ddot = np.array(ctrl_data['u_ext'][0][:, 0]) # FMPC
+        thrust_dot = np.array(ctrl_data['thrust_dot'][0])
         gp_time = 0
     elif 'u_extSOCP' in ctrl_data: # or 'gp_time' in ctrl_data:
-        action_ext = 0 #np.array(ctrl_data['u_extSOCP'][0]) # FMPC_SOCP
+        thrust_ddot = np.array(ctrl_data['u_extSOCP'][0][:, 0]) # FMPC_SOCP
         gp_time = np.array(ctrl_data['gp_time'][0])
+        thrust_dot = np.array(ctrl_data['thrust_dot'][0])
     else:
         action_ext = 0
         gp_time = 0
-    return states, error, inference_time, rmse, state_ref, action, action_ext, gp_time
+        thrust_ddot = np.array(ctrl_data['thrust_ddot'][0])
+        thrust_dot = np.array(ctrl_data['thrust_dot'][0])
+    return states, error, inference_time, rmse, state_ref, action, thrust_dot, thrust_ddot, gp_time
 
-state_mpc, error_mpc, inf_time_mpc, rmse_mpc, state_ref_mpc, action_mpc, _ , _= extract_data(data_path_nmpc)
-state_x_fmpc, error_fmpc, inf_time_fmpc, rmse_fmpc, state_ref_fmpc, action_fmpc, action_ext_fmpc, dummy = extract_data(data_path_fmpc) 
-state_x_fmpc_socp, error_fmpc_socp, inf_time_fmpc_socp, rmse_fmpc_socp, state_ref_fmpc_socp, action_fmpc_socp, action_ext_fmpc_socp, gp_time_socp = extract_data(data_path_fmpc_socp)   
+state_mpc, error_mpc, inf_time_mpc, rmse_mpc, state_ref_mpc, action_mpc, thrust_dot_mpc, thrust_ddot_mpc, _= extract_data(data_path_nmpc)
+state_x_fmpc, error_fmpc, inf_time_fmpc, rmse_fmpc, state_ref_fmpc, action_fmpc, thrust_dot_fmpc, thrust_ddot_fmpc, dummy = extract_data(data_path_fmpc) 
+state_x_fmpc_socp, error_fmpc_socp, inf_time_fmpc_socp, rmse_fmpc_socp, state_ref_fmpc_socp, action_fmpc_socp, thrust_dot_fmpc_socp, thrust_ddot_fmpc_socp, gp_time_socp = extract_data(data_path_fmpc_socp)   
 
 
 
@@ -274,6 +278,25 @@ print('               NMPC   |  FMPC   | FMPC+SOCP')
 print('Thrust: {:.5f}N   | {:.5f}N   | {:.5f}N'.format(np.max(action_mpc[:, 0]), np.max(action_fmpc[:, 0]), np.max(action_fmpc_socp[:, 0])))
 print(' Angle: {:.2f}rad | {:.2f}rad | {:.2f}rad'.format(np.max(action_mpc[:, 1]), np.max(action_fmpc[:, 1]), np.max(action_fmpc_socp[:, 1])))
 
+# Extended Input
+time = np.arange(0, np.shape(action_mpc)[0]*sample_time, sample_time )
+fig, ax = plt.subplots(2, figsize=(fig_width, fig_height))
+ax[0].plot(time, thrust_ddot_mpc, color=mpc_color, label=mpc_label, linewidth=linewidth, alpha=alpha_lines)
+if SHOW_FMPC:
+    ax[0].plot(time, thrust_ddot_fmpc, color=fmpc_color, label=fmpc_label, linewidth=linewidth, alpha=alpha_lines)
+ax[0].plot(time, thrust_ddot_fmpc_socp, color=fmpc_socp_color, label=fmpc_socp_label, linewidth=linewidth, alpha=alpha_lines)
+ax[0].set_ylabel(r'Thrust_ddot $\ddot{T}_c$ (N/s^2)')
+# ax[0].set_ylim(limits_y1)
+ax[0].legend()
+ax[0].grid()
+ax[1].plot(time, thrust_dot_mpc, color=mpc_color, label=mpc_label, linewidth=linewidth, alpha=alpha_lines)
+if SHOW_FMPC:
+    ax[1].plot(time, thrust_dot_fmpc, color=fmpc_color, label=fmpc_label, linewidth=linewidth, alpha=alpha_lines)
+ax[1].plot(time, thrust_dot_fmpc_socp, color=fmpc_socp_color, label=fmpc_socp_label, linewidth=linewidth, alpha=alpha_lines)
+ax[1].set_ylabel(r'Thrust_dot $\dot{T}_c$ (N/s)')
+ax[1].grid()
+ax[1].set_xlabel(r'Time (s)')
+# plt.savefig("./plots/thrust_inputs.pdf", format="pdf", bbox_inches="tight")
 
 ##################################################################################
 # plot inference time over time
