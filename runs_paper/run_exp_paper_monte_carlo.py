@@ -13,6 +13,7 @@ from collections import defaultdict
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
+import traceback
 
 from safe_control_gym.experiments.base_experiment import BaseExperiment
 from safe_control_gym.utils.configuration import ConfigFactory
@@ -118,7 +119,7 @@ def run_controller_trials(controller_name, env_func, ctrl_func, initial_states, 
         except Exception as e:
             # Failure: extract partial trajectory data
             print(f'    Trial {trial_idx+1} FAILED: {type(e).__name__}')
-            print(f'    Error: {str(e)[:200]}')
+            traceback.print_exc()
 
             partial_trajs = None
             timestep_failed = 0
@@ -247,35 +248,39 @@ def compute_second_half_rmse(trajs_data):
     """
     second_half_rmse_list = []
 
-    # Process each episode
-    for ep_info in trajs_data['info']:
-        # Extract MSE values from info dicts
-        mse_values = []
-        for info in ep_info:
-            if 'mse' in info:
-                mse_values.append(info['mse'])
-
-        if len(mse_values) == 0:
-            continue
-
-        # Split at midpoint and take second half
-        midpoint = len(mse_values) // 2
-        second_half_mse = mse_values[midpoint:]
-
-        # Compute RMSE for second half
-        if len(second_half_mse) > 0:
-            rmse_second_half = float(np.sqrt(np.mean(second_half_mse)))
-            second_half_rmse_list.append(rmse_second_half)
-
-    # Compute statistics across all episodes
-    if len(second_half_rmse_list) > 0:
-        mean_rmse = np.mean(second_half_rmse_list)
-        std_rmse = np.std(second_half_rmse_list)
+    if trajs_data == {}:
+        return 0.0, 0.0, [] 
     else:
-        mean_rmse = 0.0
-        std_rmse = 0.0
 
-    return mean_rmse, std_rmse, second_half_rmse_list
+    # Process each episode
+        for ep_info in trajs_data['info']:
+            # Extract MSE values from info dicts
+            mse_values = []
+            for info in ep_info:
+                if 'mse' in info:
+                    mse_values.append(info['mse'])
+
+            if len(mse_values) == 0:
+                continue
+
+            # Split at midpoint and take second half
+            midpoint = len(mse_values) // 2
+            second_half_mse = mse_values[midpoint:]
+
+            # Compute RMSE for second half
+            if len(second_half_mse) > 0:
+                rmse_second_half = float(np.sqrt(np.mean(second_half_mse)))
+                second_half_rmse_list.append(rmse_second_half)
+
+        # Compute statistics across all episodes
+        if len(second_half_rmse_list) > 0:
+            mean_rmse = np.mean(second_half_rmse_list)
+            std_rmse = np.std(second_half_rmse_list)
+        else:
+            mean_rmse = 0.0
+            std_rmse = 0.0
+
+        return mean_rmse, std_rmse, second_half_rmse_list
 
 
 def extract_timing_statistics(trajs_data, controller_name):
