@@ -265,15 +265,15 @@ class DiscreteSOCPFilter:
         success = False
         logging_dict = {}
         self.X.value = x_init
-        #mosek_params = {
-        #    'MSK_DPAR_INTPNT_CO_TOL_REL_GAP': 1e-6,  # default 1e-8
-        #    'MSK_DPAR_INTPNT_CO_TOL_PFEAS': 1e-6,    # primal feasibility, default 1e-8
-        #    'MSK_DPAR_INTPNT_CO_TOL_DFEAS': 1e-6,    # dual feasibility, default 1e-8
-        #    'MSK_IPAR_INTPNT_BASIS': 0,  # disable crossover to basic solution
-        #    #'MSK_IPAR_OPTIMIZER': 'MSK_OPTIMIZER_INTPNT',  # ensure interior-point method
-        #    'MSK_IPAR_NUM_THREADS': 4,  # sometimes single-thread is faster for small problems
-        #}
-        self.prob.solve(solver='MOSEK', warm_start=True, verbose=True)
+        mosek_params = {
+            'MSK_DPAR_INTPNT_CO_TOL_REL_GAP': 1e-6,  # default 1e-8
+            'MSK_DPAR_INTPNT_CO_TOL_PFEAS': 1e-6,    # primal feasibility, default 1e-8
+            'MSK_DPAR_INTPNT_CO_TOL_DFEAS': 1e-6,    # dual feasibility, default 1e-8
+            #'MSK_IPAR_INTPNT_BASIS': 0,  # disable crossover to basic solution
+            #'MSK_IPAR_OPTIMIZER': 'MSK_OPTIMIZER_INTPNT',  # ensure interior-point method
+            #'MSK_IPAR_NUM_THREADS': 4,  # sometimes single-thread is faster for small problems
+        }
+        self.prob.solve(solver='MOSEK', warm_start=True, verbose=True, mosek_params=mosek_params)
         #solver_opts = {'iterative_refinement_enable': False,
         #               'tol_feas': 1e-6,
         #               'tol_gap_abs': 1e-6,  # Add this
