@@ -2,7 +2,6 @@ import numpy as np
 from numpy.linalg import norm
 import cvxpy as cp
 import torch
-from time import time
 
 # for testing on its own
 import os
@@ -10,6 +9,7 @@ import pickle
 import gpytorch
 from safe_control_gym.controllers.mpc.flat_gp_utils import ZeroMeanAffineGP, GaussianProcess
 import matplotlib.pyplot as plt
+
 
 # Make @profile decorator optional (only available when running with kernprof)
 try:
@@ -47,16 +47,18 @@ class DiscreteSOCPFilter:
         self.X = cp.Variable(shape=(7,))
         self.A1 = cp.Parameter(shape=(10, 7))
         self.A2 = cp.Parameter(shape=(9, 7))
-        self.A3 = cp.Parameter(shape=(2, 7))
+        self.A3 = cp.Parameter(shape=(3, 7))
         self.b1 = cp.Parameter(shape=(10,))
         self.b2 = cp.Parameter(shape=(9,))
-        self.b3 = np.zeros((2, 1))
+        self.b3 = np.zeros((3,))
+        self.b3[2] = 1
         self.c1 = cp.Parameter(shape=(1, 7))
         self.c2 = cp.Parameter(shape=(1, 7))
-        self.c3 = cp.Parameter(shape=(1, 7))
+        self.c3 = np.zeros((1, 7))
+        self.c3[0, 6] = 1
         self.d1 = cp.Parameter()
         self.d2 = cp.Parameter()
-        self.d3 = 0
+        self.d3 = 1
         # put into lists
         As = [self.A1, self.A2, self.A3]
         bs = [self.b1, self.b2, self.b3]
@@ -189,7 +191,7 @@ class DiscreteSOCPFilter:
         stab_start = time()
         e_k = z - z_ref
         v_nom = v_des # from equivalence of FMPC with closed form solution
-        A2, b2, c2, d2 , A3, c3 = stab_filter_matrices(gam1, gam2, gam3, gam4, L_gam5, Linv_gam5,
+        A2, b2, c2, d2 , A3 = stab_filter_matrices(gam1, gam2, gam3, gam4, L_gam5, Linv_gam5,
                                               self.Q, self.R, self.P, self.K, self.Bd, self.Ad, self.W3_mat, e_k,
                                               self.input_bound_normalized, v_nom, self.beta_sqrt)
         stab_time = time() - stab_start
@@ -205,8 +207,8 @@ class DiscreteSOCPFilter:
         self.b2.value = b2.squeeze()
         self.c2.value = c2
         self.d2.value = d2
-        self.A3.value = A3
-        self.c3.value = c3
+
+        self.A3.value = A3 # note: in thesis: A2 and A3 flipped
 
         # dynamic extension constraint: set previous value of extension states
         if self.thrust_bound_applied:
@@ -338,8 +340,8 @@ def dummy_var_matrices(gam2, L_gam5, d_weights): # for feedback linearization
     A = np.zeros((10,7))
     A[0, :2] = 2*gam2[0]
     A[1, :2] = 2*gam2[1]
-    A[2:4, :2] = 2*L_gam5[0]
-    A[4:6, :2] = 2*L_gam5[1]
+    A[2:4, :2] = 2*L_gam5[0].T
+    A[4:6, :2] = 2*L_gam5[1].T
     A[6, 2] = -1.0
     A[7, 3] = d_weights[0]
     A[8, 4] = d_weights[1]
@@ -394,8 +396,8 @@ def stab_filter_matrices(gam1,
     A[8, 6] = 1.0 # dummy variable to extend
 
     b = np.zeros((9,1))
-    b[0:2, 0] = -L1_beta_sqrt*term_Linv_gam4_0
-    b[4:6, 0] = -L2_beta_sqrt*term_Linv_gam4_1
+    b[0:2, 0] = L1_beta_sqrt*term_Linv_gam4_0
+    b[4:6, 0] = L2_beta_sqrt*term_Linv_gam4_1
 
     b[2, 0] = L1_beta_sqrt*np.sqrt(max((0.5*gam3[0] - (term_Linv_gam4_0[0])**2), 1e-10))
     b[3, 0] = L1_beta_sqrt*np.sqrt(max((0.5*gam3[0] - (term_Linv_gam4_0[1])**2), 1e-10))
@@ -408,77 +410,16 @@ def stab_filter_matrices(gam1,
 
     d = w3 + 0.25*w1.T @ W2_inv @ w1 - W2[0,0]*((gam1[0]+w4[0]-v_nom[0])**2) - W2[1,1]*((gam1[1]+w4[1]-v_nom[1])**2) 
 
-    # tmp = 0.25*w1.T @ W2_inv @ w1
-    # tmp2 = W2[0,0]*((gam1[0]+w4[0]-v_nom[0])**2)
-    # tmp3 = W2[1,1]*((gam1[1]+w4[1]-v_nom[1])**2)
+    A_dummy = stab_filter_dummy_matrices(gam2, [np.sqrt(W2[0,0]), np.sqrt(W2[1,1])])
 
-    A_dummy, c_dummy = stab_filter_dummy_matrices(gam2, [np.sqrt(W2[0,0]), np.sqrt(W2[1,1])])
-
-    # # bound quadratic term
-    # bound = np.zeros(2)
-    # bound[0] = np.max((np.abs(gam1[0] + gam2[0].T@u_max - v_nom[0]), np.abs(gam1[0] + gam2[0].T@(-u_max) - v_nom[0]))) # here u_min = -u_max, symmetric constraints on u
-    # bound[1] = np.max((np.abs(gam1[1] + gam2[1].T@u_max - v_nom[1]), np.abs(gam1[1] + gam2[1].T@(-u_max) - v_nom[1])))
-    # w2 = bound.T @ Bd.T @ P @ Bd @ bound
-
-    # term_Linv_gam4_0 = 0.5*L_gam5_inv[0] @ gam4[0]
-    # term_Linv_gam4_1 = 0.5*L_gam5_inv[1] @ gam4[1]
-    # # if True : #(0.5*gam3[1] - (term_Linv_gam4_1[1])**2) < 0:
-    # #     print('Terms Linv*gam4*0.5')
-    # #     print(L_gam5[1]@L_gam5[1].T)
-    # #     print(L_gam5[1])
-    # #     print(L_gam5_inv[1])
-    # #     print(gam4[1])
-    # #     # print(term_Linv_gam4_0)
-    # #     print(term_Linv_gam4_1)
-    # #     # print(gam3[0])
-    # #     print(gam3[1])
-    # #     print((0.5*gam3[1] - (term_Linv_gam4_1[1])**2))
-    # #     # exit()
-
-    # # print(Bd)
-    # # print(P)
-    # # print(Bd.T@P@Bd)
-
-    # # tmp1 = gam1[0] + gam2[0].T@u_max
-    # # tmp2 = gam1[0] + gam2[0].T@(-u_max)
-
-    # # tmp3 = gam1[1] + gam2[1].T@u_max
-    # # tmp4 = gam1[1] + gam2[1].T@(-u_max)
-
-    # w1_beta_0 = w1_abs[0]*beta_sqrt[0]
-    # w1_beta_1 = w1_abs[1]*beta_sqrt[1]
-
-    # A = np.zeros((8,7))
-    # A[0:2, 0:2] = w1_beta_0*L_gam5[0]    
-    # A[4:6, 0:2] = w1_beta_1*L_gam5[1]
-
-    # b = np.zeros((8,1))
-    # b[0:2, 0] = -w1_beta_0*term_Linv_gam4_0
-    # b[4:6, 0] = -w1_beta_1*term_Linv_gam4_1
-
-    # b[2, 0] = w1_beta_0*np.sqrt(max((0.4*gam3[0] - (term_Linv_gam4_0[0])**2), 1e-10))
-    # b[3, 0] = w1_beta_0*np.sqrt(max((0.6*gam3[0] - (term_Linv_gam4_0[1])**2), 1e-10))
-    # b[6, 0] = w1_beta_1*np.sqrt(max((0.4*gam3[1] - (term_Linv_gam4_1[0])**2), 1e-10)) # distribute gamma3 unevenly for numerical stability
-    # b[7, 0] = w1_beta_1*np.sqrt(max((0.6*gam3[1] - (term_Linv_gam4_1[1])**2), 1e-10))
-
-    # c = np.zeros((1, 7))
-    # c[0, 0:2] = -w1[0]*gam2[0].T -w1[1]*gam2[1].T
-    # c[0, 3] = 1
-
-    # d = w3 - w2 -w1[0]*(gam1[0]-v_nom[0]) - w1[1]*(gam1[1]-v_nom[1])  
-
-     
-
-    return A, b, c, d, A_dummy, c_dummy
+    return A, b, c, d, A_dummy
 
 def stab_filter_dummy_matrices(gam2, w2_sqrt):
-    A = np.zeros((2, 7))
+    A = np.zeros((3, 7))
     A[0, 0:2] = w2_sqrt[0] * gam2[0]
     A[1, 0:2] = w2_sqrt[1] * gam2[1]
-
-    c = np.zeros((1, 7))
-    c[0, 6] = 1
-    return A, c
+    A[2, 6] = -1
+    return A
 
 def state_con_matrices(z, gam1, gam2, gam3, gam4, L_gam5, Linv_gam5,
                        h, b_con, Ad, Bd, w_s1, w_s2):
@@ -487,12 +428,12 @@ def state_con_matrices(z, gam1, gam2, gam3, gam4, L_gam5, Linv_gam5,
     term_Linv_gam4_1 = 0.5*Linv_gam5[1] @ gam4[1]
     
     A = np.zeros((8,7))
-    A[0:2, 0:2] = w_s1*L_gam5[0]    
-    A[4:6, 0:2] = w_s2*L_gam5[1]
+    A[0:2, 0:2] = w_s1*L_gam5[0].T    
+    A[4:6, 0:2] = w_s2*L_gam5[1].T
 
     b = np.zeros((8,1))
-    b[0:2, 0] = -w_s1*term_Linv_gam4_0
-    b[4:6, 0] = -w_s2*term_Linv_gam4_1
+    b[0:2, 0] = w_s1*term_Linv_gam4_0
+    b[4:6, 0] = w_s2*term_Linv_gam4_1
 
     b[2, 0] = w_s1*np.sqrt(max((0.4*gam3[0] - (term_Linv_gam4_0[0])**2), 1e-10)) # distribute gamma3 unevenly for numerical stability
     b[3, 0] = w_s1*np.sqrt(max((0.6*gam3[0] - (term_Linv_gam4_0[1])**2), 1e-10)) # max() is fine, as it only makes constraint more conservative
@@ -505,156 +446,3 @@ def state_con_matrices(z, gam1, gam2, gam3, gam4, L_gam5, Linv_gam5,
 
     d = b_con - h.T @ Ad @ z - h.T @ Bd @ np.vstack((gam1[0], gam1[1]))
     return A, b, c, d
-
-# # for debugging: the transformation that is supposed to be learned with the GP written out analytically
-# def _get_u_from_flat_states_2D_att_ext(z, v, dyn_pars, g):
-#     # for system with dynamic extension: u + [Tc_ddot, theta_c]
-#     beta_1 = dyn_pars['beta_1']
-#     beta_2 = dyn_pars['beta_2']
-#     alpha_1 =  dyn_pars['alpha_1']
-#     alpha_2 =  dyn_pars['alpha_2']
-#     alpha_3 =  dyn_pars['alpha_3']
-
-#     term_acc_sqrd = (z[2])**2 + (z[6]+g)**2 # x_ddot^2 + (z_ddot+g)^2
-#     theta = np.arctan2(z[2], (z[6]+g))
-#     theta_dot = (z[3]*(z[6]+g)- z[2]*z[7])/term_acc_sqrd
-#     theta_ddot = 1/term_acc_sqrd * (v[0]*(z[6]+g) - z[2]*v[1]) + (1/(term_acc_sqrd**2)) * (2*(z[6]+g)*z[7] + 2*z[2]*z[3]) * (z[2]*z[7] - z[3]*(z[6]+g))
-
-#     #t = -(beta_2/beta_1) + np.sqrt(term_acc_sqrd)/beta_1
-#     p = (1/alpha_3) * (theta_ddot - alpha_1*theta -alpha_2*theta_dot)
-
-#     t_ddot = 1/beta_1 * 1/np.sqrt(term_acc_sqrd)*((z[3]**2 + z[7]**2 + z[2]*v[0] + (z[6]+g)*v[1]) - ((z[2]*z[3] + (z[6]+g)*z[7])**2)/term_acc_sqrd)
-#     return np.array([t_ddot, p])
-
-# if __name__ == "__main__":
-#     # for analytic reference in debugging
-#     g=9.8
-
-#     # 2D Quadrotor Attitude model. TODO: Take from env!
-#     inertial_prop = {}
-#     inertial_prop['alpha_1'] = -140.8
-#     inertial_prop['alpha_2'] = -13.4
-#     inertial_prop['alpha_3'] = 124.8
-#     inertial_prop['beta_1'] = 18.11
-#     inertial_prop['beta_2'] = 3.68
-
-#     # load two GPs
-#     output_dir_0 = f'/home/tobias/Studium/masterarbeit/code/safe-control-gym/examples/mpc/fgp/gp_v0'
-#     output_dir_1 = f'/home/tobias/Studium/masterarbeit/code/safe-control-gym/examples/mpc/fgp/gp_v1'
-#     # Check if the folder exists
-#     assert os.path.exists(output_dir_0), 'cannot find directory of GP 0'
-#     assert os.path.exists(output_dir_1), 'cannot find directory of GP 1'
-
-#     gp_type = ZeroMeanAffineGP
-#     likelihood_0 = gpytorch.likelihoods.GaussianLikelihood()
-#     gp_0 = GaussianProcess(gp_type, likelihood_0, 1, output_dir_0)
-#     gp_0.init_with_hyperparam(output_dir_0)
-
-#     likelihood_1 = gpytorch.likelihoods.GaussianLikelihood()
-#     gp_1 = GaussianProcess(gp_type, likelihood_1, 1, output_dir_1)
-#     gp_1.init_with_hyperparam(output_dir_1)
-
-#     gps = [gp_0, gp_1]
-
-#     # initialize SOCP Filter
-#     filter = DiscreteSOCPFilter('test',gps=gps, input_bound=None) # input_bound=np.array((0.6, 0.3)))
-
-#     # get test points - from evaluation dataset, so that it is a point that makes sense
-#     eval_data_file = './examples/mpc/fgp/gp_test_data.pkl' 
-#     # eval_data_file = './examples/mpc/fgp/gp_train_data_fig8.pkl'
-#     with open(eval_data_file, 'rb') as file:
-#         eval_data = pickle.load(file)
-#     inputs_eval = eval_data['inputs']
-#     targets_eval = eval_data['targets'] 
-#     inputs_eval = np.vstack(inputs_eval)
-#     targets_eval = np.vstack(targets_eval)
-
-#     z_data = np.transpose(inputs_eval[:, :-2]) #transpose to match data that comes out of FMPC horizon
-#     u_data = np.transpose(inputs_eval[:, -2:])
-#     v_data = np.transpose(targets_eval[:])
-
-#     # rng = np.random.default_rng(seed=9)
-#     # n_datapoints_random =300
-#     # z_data = rng.random(( 8, n_datapoints_random))*5
-#     # u_data = np.zeros(( 2, n_datapoints_random))
-#     # v_data = rng.random(( 2, n_datapoints_random))*10
-
-#     start_idx = 0 #15 #175
-#     stop_idx = -1 #50 #215
-#     z_data = z_data[:, start_idx:stop_idx]
-#     u_data = u_data[:, start_idx:stop_idx]
-#     v_data = v_data[:, start_idx:stop_idx]
-
-#     u_socp = np.zeros(np.shape(u_data))
-#     covs_run = np.zeros(np.shape(u_data))
-#     means_run = np.zeros(np.shape(u_data))
-#     success_list = []
-#     d_sf_list = []
-#     q_dummy_list = []
-
-#     for point_idx in range(np.shape(z_data)[1]):
-#         z_test = z_data[:,point_idx]
-#         v_test = v_data[:,point_idx]    
-#         # compute forward
-#         u, success, d_sf, q_dummy, cost_val, cost_val_lin_part,  means, covs = filter.compute_feedback_input(z_test, z_test, v_test)
-#         u_socp[:, point_idx] = u
-#         success_list.append(success)
-#         d_sf_list.append(d_sf)
-#         q_dummy_list.append(q_dummy)
-#         covs_run[:, point_idx] = covs
-#         means_run[:, point_idx] = means
-    
-#     u_analytic = np.zeros(np.shape(u_data))
-#     for point_idx in range(np.shape(z_data)[1]):
-#         z_test = z_data[:,point_idx]
-#         v_test = v_data[:,point_idx]    
-#         u = _get_u_from_flat_states_2D_att_ext(z_test, v_test, inertial_prop, g)
-#         u_analytic[:, point_idx] = u
-    
-#     # plot test data
-#     fig, ax = plt.subplots(2, 3) 
-#     t = np.arange(0, np.shape(u_data)[1])
-#     # First subplot
-#     ax[0, 0].plot(t, u_data[0, :], label='Test input u0' ) 
-#     ax[0, 0].plot(t, u_socp[0, :], label='SOCP result u0' ) 
-#     ax[0, 0].plot(t, u_analytic[0, :], label='analytic reference u0' ) 
-#     ax[0, 0].set_title("First component u0")
-#     ax[0, 0].set_xlabel("datapoint")
-#     ax[0, 0].set_ylabel("Tc_ddot")
-#     ax[0, 0].legend()
-
-#     ax[1, 0].plot(t, u_data[1, :], label='Test input u1' ) 
-#     ax[1, 0].plot(t, u_socp[1, :], label='SOCP result u1' )
-#     ax[1, 0].plot(t, u_analytic[1, :], label='analytic reference u1' ) 
-#     ax[1, 0].set_title("Second Component u1")
-#     ax[1, 0].set_xlabel("datapoint")
-#     ax[1, 0].set_ylabel("Theta_c")
-#     ax[1, 0].legend()
-
-#     ax[0, 1].plot(t, means_run[0, :], label='Mean GP0' )
-#     ax[0, 1].plot(t, v_data[0, :], label='v_0' )   
-#     ax[0, 1].set_title("Mean GP0")
-#     ax[0, 1].set_xlabel("datapoint")
-#     ax[0, 1].set_ylabel("Mean")
-#     ax[0, 1].legend()
-
-#     ax[1, 1].plot(t, means_run[1, :], label='Mean GP1' ) 
-#     ax[1, 1].plot(t, v_data[1, :], label='v_1' )  
-#     ax[1, 1].set_title("Mean GP1")
-#     ax[1, 1].set_xlabel("datapoint")
-#     ax[1, 1].set_ylabel("Mean")
-#     ax[1, 1].legend()
-
-#     ax[0, 2].plot(t, 2*np.sqrt(covs_run[0, :]), label='2x standard deviation GP0' )  
-#     ax[0, 2].set_title("2x Standard Deviation GP0")
-#     ax[0, 2].set_xlabel("datapoint")
-#     ax[0, 2].set_ylabel("2x Std Dev")
-#     ax[0, 2].legend()
-
-#     ax[1, 2].plot(t, 2*np.sqrt(covs_run[1, :]), label='2x standard deviation GP1' )  
-#     ax[1, 2].set_title("2x Standard Deviation GP1")
-#     ax[1, 2].set_xlabel("datapoint")
-#     ax[1, 2].set_ylabel("2x Std Dev")
-#     ax[1, 2].legend()
-
-#     plt.show()

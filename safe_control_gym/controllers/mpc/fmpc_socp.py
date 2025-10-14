@@ -389,7 +389,7 @@ class FlatMPC_SOCP(BaseController):
         # self.results_dict['socp_cost'].append(socp_logging['cost'])
         # self.results_dict['socp_cost_linPart'].append(socp_logging['cost_lin'])
         self.results_dict['socp_solve_time'].append(socp_logging['solve_time'])
-        # self.results_dict['thrust_dot'].append(self.eta[1])
+        self.results_dict['thrust_dot'].append(self.eta[1])
         self.results_dict['gp_time'].append(socp_logging['gp_time'])
         self.results_dict['mpc_solve_time'].append(self.mpc.results_dict['mpc_solve_time'][-1])
         self.results_dict['observer_time'].append(observer_time)
