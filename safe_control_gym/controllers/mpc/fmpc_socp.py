@@ -4,6 +4,7 @@ Learning based control using differential flatness and GPs
 
 
 from copy import deepcopy
+from time import time
 
 import casadi as cs
 import numpy as np
@@ -11,10 +12,17 @@ import pickle
 
 import matplotlib.pyplot as plt
 
+# Make @profile decorator optional (only available when running with kernprof)
+try:
+    profile
+except NameError:
+    def profile(func):
+        return func
+
 from safe_control_gym.controllers.lqr.lqr_utils import discretize_linear_system
 from safe_control_gym.controllers.mpc.mpc import MPC
 from safe_control_gym.controllers.mpc.linear_mpc import LinearMPC
-# from safe_control_gym.controllers.mpc.linear_mpc_acados import LinearMPC_ACADOS
+from safe_control_gym.controllers.mpc.linear_mpc_acados import LinearMPC_ACADOS
 from safe_control_gym.controllers.base_controller import BaseController
 from safe_control_gym.controllers.mpc.mpc_utils import get_cost_weight_matrix
 from safe_control_gym.envs.benchmark_env import Task
@@ -299,10 +307,23 @@ class FlatMPC_SOCP(BaseController):
                              'socp_cost':[],
                              'socp_cost_linPart':[],  
                              'socp_solve_time':[],
-                             'thrust_dot':[], 
-                             'gp_time':[],                          
+                             'thrust_dot':[],
+                             'gp_time':[],
+                             'mpc_solve_time':[],
+                             'observer_time':[],
+                             'flat_transform_time':[],
+                             'cholesky_time':[],
+                             'cost_time':[],
+                             'dummy_time':[],
+                             'stab_time':[],
+                             'state_time':[],
+                             'param_time':[],
+                             'dyn_ext_time':[],
+                             'observer_update_time':[],
+                             'logging_time':[],
                              }
         
+    @profile
     def select_action(self,
                       obs,
                       info=None
@@ -315,37 +336,47 @@ class FlatMPC_SOCP(BaseController):
 
         Returns:
             action (ndarray): Input/action to the task/env.
-        '''  
+        '''
         # get flat state estimation from observer
-        z_obs = self.fs_obs.compute_observation(obs)    
+        observer_start = time()
+        z_obs = self.fs_obs.compute_observation(obs)
+        observer_time = time() - observer_start
 
-        # run MPC controller 
-        v = self.mpc.select_action(z_obs) 
+        # run MPC controller
+        v = self.mpc.select_action(z_obs)
         z_horizon = self.mpc.x_prev #8xN set in linearMPC
-        v_horizon = self.mpc.u_prev #2xN       
-        
-        # flat input transformation: z and v to action u        
+        v_horizon = self.mpc.u_prev #2xN
+
+        # flat input transformation: z and v to action u
+        flat_transform_start = time()
         zd = z_horizon[:, 0].copy()
         vd = v_horizon[:, 0].copy()
         z_ref = self.mpc.get_references()[:, 0] # TODO return from MPC for performance improvements
         action_extended = _get_u_from_flat_states_2D_att_ext(zd, vd, self.inertial_prop, self.mpc.env.GRAVITY_ACC)
+        flat_transform_time = time() - flat_transform_start
+
         action_extended_socp, success, self.socp_opt, socp_logging = self.filter.compute_feedback_input(zd, z_ref, vd, self.eta)
 
         action_extended_used = action_extended_socp
         # action_extended_used = action_extended
-                
+
         # do double integration on first action Tc_ddot --> Tc
+        dyn_ext_start = time()
         self.eta = self.Ad_dyn_ext @ self.eta + self.Bd_dyn_ext @ action_extended_used
         action = np.zeros(np.shape(action_extended))
         action[0] = self.eta[0]
         action[1] = action_extended_used[1]
+        dyn_ext_time = time() - dyn_ext_start
 
         # feed data into observer
+        observer_update_start = time()
         self.fs_obs.input_FMPC_result(z_horizon, v_horizon, action)
+        observer_update_time = time() - observer_update_start
 
         # data logging
+        logging_start = time()
         # self.results_dict['obs_z'].append(z_obs)
-        # self.results_dict['u'].append(action)       
+        # self.results_dict['u'].append(action)
         # self.results_dict['u_extFT'].append(action_extended)
         self.results_dict['u_extSOCP'].append(action_extended_socp)
         # self.results_dict['gp_means'].append(socp_logging['means'])
@@ -357,10 +388,23 @@ class FlatMPC_SOCP(BaseController):
         # self.results_dict['socp_dummy'].append(self.socp_opt[2])
         # self.results_dict['socp_cost'].append(socp_logging['cost'])
         # self.results_dict['socp_cost_linPart'].append(socp_logging['cost_lin'])
-        # self.results_dict['socp_solve_time'].append(socp_logging['solve_time'])
+        self.results_dict['socp_solve_time'].append(socp_logging['solve_time'])
         # self.results_dict['thrust_dot'].append(self.eta[1])
         self.results_dict['gp_time'].append(socp_logging['gp_time'])
-        
+        self.results_dict['mpc_solve_time'].append(self.mpc.results_dict['mpc_solve_time'][-1])
+        self.results_dict['observer_time'].append(observer_time)
+        self.results_dict['flat_transform_time'].append(flat_transform_time)
+        self.results_dict['cholesky_time'].append(socp_logging['cholesky_time'])
+        self.results_dict['cost_time'].append(socp_logging['cost_time'])
+        self.results_dict['dummy_time'].append(socp_logging['dummy_time'])
+        self.results_dict['stab_time'].append(socp_logging['stab_time'])
+        self.results_dict['state_time'].append(socp_logging['state_time'])
+        self.results_dict['param_time'].append(socp_logging['param_time'])
+        self.results_dict['dyn_ext_time'].append(dyn_ext_time)
+        self.results_dict['observer_update_time'].append(observer_update_time)
+        logging_time = time() - logging_start
+        self.results_dict['logging_time'].append(logging_time)
+
         return action
     
     def close(self):

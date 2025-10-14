@@ -1,7 +1,8 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(name='safe_control_gym',
       version='2.0.0',
+      packages=find_packages(include=['safe_control_gym*', 'gp*']),
       install_requires=[
           'matplotlib',
           'munch',
@@ -18,8 +19,8 @@ setup(name='safe_control_gym',
           'pybullet',
           'numpy',
           'cvxpy',
-          'pycddlib',
-          'pytope',
+          #'pycddlib',
+          #'pytope',
           'Mosek',
           'termcolor',
           'pytest',

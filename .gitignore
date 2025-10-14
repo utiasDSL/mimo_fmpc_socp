@@ -1,4 +1,5 @@
 #### Temporary files
+CLAUDE.md
 examples/lqr/*data/
 #
 examples/mpsc/temp-data/

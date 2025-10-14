@@ -370,10 +370,14 @@ class MPC(BaseController):
             self.traj_step += 1
 
         # Solve the optimization problem.
+        from time import time
+        mpc_solve_start = time()
         try:
             sol = opti.solve()
+            mpc_solve_time = time() - mpc_solve_start
             x_val, u_val = sol.value(x_var), sol.value(u_var)
         except RuntimeError:
+            mpc_solve_time = time() - mpc_solve_start
             print(colored('Infeasible MPC Problem', 'red'))
             return_status = opti.return_status()
             print(colored(f'Optimization failed with status: {return_status}', 'red'))
@@ -398,6 +402,7 @@ class MPC(BaseController):
         self.results_dict['horizon_states'].append(deepcopy(self.x_prev))
         self.results_dict['horizon_inputs'].append(deepcopy(self.u_prev))
         self.results_dict['goal_states'].append(deepcopy(goal_states))
+        self.results_dict['mpc_solve_time'].append(mpc_solve_time)
         if self.solver == 'ipopt':
             self.results_dict['t_wall'].append(opti.stats()['t_wall_total'])
         # Take the first action from the solved action sequence.
@@ -455,7 +460,8 @@ class MPC(BaseController):
                              'common_cost': [],
                              'state': [],
                              'state_error': [],
-                             't_wall': []
+                             't_wall': [],
+                             'mpc_solve_time': []
                              }
 
     def run(self,

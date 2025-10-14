@@ -1,0 +1,31 @@
+task_config:
+  # Enable randomized initial conditions
+  randomized_init: True
+
+  # Randomization distributions for initial state
+  # These values will be added to the base init_state values
+  init_state_randomization_info:
+    init_x:
+      distrib: 'uniform'
+      low: -0.05
+      high: 0.05
+    init_x_dot:
+      distrib: 'uniform'
+      low: -0.05
+      high: 0.05
+    init_z:
+      distrib: 'uniform'
+      low: -0.05
+      high: 0.05
+    init_z_dot:
+      distrib: 'uniform'
+      low: -0.05
+      high: 0.05
+    init_theta:
+      distrib: 'uniform'
+      low: -0.05
+      high: 0.05
+    init_theta_dot:
+      distrib: 'uniform'
+      low: -0.05
+      high: 0.05

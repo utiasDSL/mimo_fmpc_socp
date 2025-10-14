@@ -11,6 +11,13 @@ import gpytorch
 from safe_control_gym.controllers.mpc.flat_gp_utils import ZeroMeanAffineGP, GaussianProcess
 import matplotlib.pyplot as plt
 
+# Make @profile decorator optional (only available when running with kernprof)
+try:
+    profile
+except NameError:
+    def profile(func):
+        return func
+
 class DiscreteSOCPFilter:
     def __init__(self, gps, ctrl_mat, input_bound, normalization_vect = np.ones((6,)), slack_weights=[25.0, 250000.0, 25.0], beta_sqrt = [2, 2], state_bound=None, thrust_bound=None, dyn_ext_mat=None):
 
@@ -123,9 +130,10 @@ class DiscreteSOCPFilter:
         # setup optimization problem      
         self.prob = cp.Problem(cp.Minimize(self.cost @ self.X), constraints)
 
-    def compute_feedback_input(self, z, z_ref, v_des, eta= np.zeros((2,)),  x_init=np.zeros((7,)), **kwargs): 
+    @profile
+    def compute_feedback_input(self, z, z_ref, v_des, eta= np.zeros((2,)),  x_init=np.zeros((7,)), **kwargs):
         """ Compute u so it can be used in feedback loop
-        Args: 
+        Args:
         z: flat state to linearize with, from FMPC
         z_ref: reference flat state for stability constraint
         v_des: flat input from FMPC
@@ -145,12 +153,17 @@ class DiscreteSOCPFilter:
         L_gam5 = []
         Linv_gam5 = []
         gp_time = []
+        cholesky_time = []
         for i in [0, 1]: #range(len(gp_models)):
-            start_time = time()
+            gp_start = time()
             gamma1, gamma2, gamma3, gamma4, gamma5 = get_gammas(z_query, self.gps[i])
-            gp_time.append(time()-start_time)
+            gp_time.append(time() - gp_start)
+
+            chol_start = time()
             L_chol = np.linalg.cholesky(gamma5)
             L_chol_inv = np.linalg.inv(L_chol)
+            cholesky_time.append(time() - chol_start)
+
             gam1.append(gamma1)
             gam2.append(gamma2)
             gam3.append(gamma3)
@@ -158,31 +171,40 @@ class DiscreteSOCPFilter:
             gam5.append(gamma5)
             L_gam5.append(L_chol)
             Linv_gam5.append(L_chol_inv)
-        
+
         gp_time_total = gp_time[0] + gp_time[1]
+        cholesky_time_total = cholesky_time[0] + cholesky_time[1]
 
         # Compute cost coefficients
+        cost_start = time()
         cost = compute_cost(gam1, gam2, gam4, v_des)
-        self.cost.value = cost
+        cost_time = time() - cost_start
 
         # Compute dummy var mats (feedback linearization part)
+        dummy_start = time()
         A1, b1, c1, d1 = dummy_var_matrices(gam2, L_gam5, self.d_weights)
-        self.A1.value = A1
-        self.b1.value = b1.squeeze()
-        self.c1.value = c1
-        self.d1.value = d1
+        dummy_time = time() - dummy_start
 
         # Compute stablity filter coeffs
+        stab_start = time()
         e_k = z - z_ref
         v_nom = v_des # from equivalence of FMPC with closed form solution
         A2, b2, c2, d2 , A3, c3 = stab_filter_matrices(gam1, gam2, gam3, gam4, L_gam5, Linv_gam5,
                                               self.Q, self.R, self.P, self.K, self.Bd, self.Ad, self.W3_mat, e_k,
                                               self.input_bound_normalized, v_nom, self.beta_sqrt)
+        stab_time = time() - stab_start
+
+        # Parameter assignment
+        param_start = time()
+        self.cost.value = cost
+        self.A1.value = A1
+        self.b1.value = b1.squeeze()
+        self.c1.value = c1
+        self.d1.value = d1
         self.A2.value = A2
         self.b2.value = b2.squeeze()
         self.c2.value = c2
         self.d2.value = d2
-
         self.A3.value = A3
         self.c3.value = c3
 
@@ -191,9 +213,9 @@ class DiscreteSOCPFilter:
             self.eta.value = eta
 
         # # Compute state constraints.
-
+        state_time = 0.0
         if self.state_bound is not None:
-
+            state_start = time()
             Astate, bstate, cstate, dstate = state_con_matrices(z, gam1, gam2, gam3, gam4, L_gam5, Linv_gam5,
                                                                 self.h, self.bcon, self.Ad, self.Bd, self.w_s1, self.w_s2)
 
@@ -201,6 +223,9 @@ class DiscreteSOCPFilter:
             self.bstate.value = bstate.squeeze()
             self.cstate.value = cstate
             self.dstate.value = dstate.squeeze()
+            state_time = time() - state_start
+
+        param_time = time() - param_start
 
         # debugging: print out everything!!
         # print('-----------------------------------------------------------')
@@ -240,7 +265,22 @@ class DiscreteSOCPFilter:
         success = False
         logging_dict = {}
         self.X.value = x_init
-        self.prob.solve(solver='MOSEK', warm_start=True, verbose=False)
+        #mosek_params = {
+        #    'MSK_DPAR_INTPNT_CO_TOL_REL_GAP': 1e-6,  # default 1e-8
+        #    'MSK_DPAR_INTPNT_CO_TOL_PFEAS': 1e-6,    # primal feasibility, default 1e-8
+        #    'MSK_DPAR_INTPNT_CO_TOL_DFEAS': 1e-6,    # dual feasibility, default 1e-8
+        #    'MSK_IPAR_INTPNT_BASIS': 0,  # disable crossover to basic solution
+        #    #'MSK_IPAR_OPTIMIZER': 'MSK_OPTIMIZER_INTPNT',  # ensure interior-point method
+        #    'MSK_IPAR_NUM_THREADS': 4,  # sometimes single-thread is faster for small problems
+        #}
+        self.prob.solve(solver='MOSEK', warm_start=True, verbose=True)
+        #solver_opts = {'iterative_refinement_enable': False,
+        #               'tol_feas': 1e-6,
+        #               'tol_gap_abs': 1e-6,  # Add this
+        #               'tol_gap_rel': 1e-6,  # Add this
+        #    }
+        #self.prob.solve(solver=cp.CLARABEL, warm_start=True, verbose=True, **solver_opts)
+
         if 'optimal' in self.prob.status:
             success = True
             # debugging: compute the covariance at this input u: just sample from GP
@@ -253,7 +293,7 @@ class DiscreteSOCPFilter:
             # covs = [cov0, cov1]
             # cost_val = self.cost.value@self.X.value
             # cost_val_lin_part = self.cost.value[0, 0]*self.X.value[0] + self.cost.value[0, 1]*self.X.value[1]
-            # solve_time = self.prob.solver_stats.solve_time
+            solve_time = self.prob.solver_stats.solve_time
             # logging_dict['means'] = means
             # logging_dict['covs'] = covs
             # logging_dict['cost'] = cost_val
@@ -261,8 +301,14 @@ class DiscreteSOCPFilter:
             # logging_dict['q_dummy_val'] = self.X.value[2] # take from X.value directly in fmpc_socp
             # logging_dict['d1_slack'] = self.X.value[3]
             # logging_dict['d2_slack'] = self.X.value[4]
-            # logging_dict['solve_time'] = solve_time
+            logging_dict['solve_time'] = solve_time
             logging_dict['gp_time'] = gp_time
+            logging_dict['cholesky_time'] = cholesky_time
+            logging_dict['cost_time'] = cost_time
+            logging_dict['dummy_time'] = dummy_time
+            logging_dict['stab_time'] = stab_time
+            logging_dict['state_time'] = state_time
+            logging_dict['param_time'] = param_time
 
             return self.X.value[0:2]*self.norm_u, success, self.X.value, logging_dict   
         

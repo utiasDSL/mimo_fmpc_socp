@@ -19,9 +19,9 @@ algo_config:
     randomize_prior_prop: False
     prior_prop_rand_info: null
   warmstart: True
-  solver: ipopt
+  solver: ipopt 
   use_full_flat_reference: True
-  use_acados: False
+  use_acados: true 
 
   socp_config:
     beta_sqrt:

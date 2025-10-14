@@ -194,7 +194,7 @@ class BaseExperiment:
             obs (ndarray): The initial observation.
             info (dict): The initial info.
         '''
-        if self.env.INFO_IN_RESET:
+        if self.env.env.INFO_IN_RESET:
             obs, info = self.env.reset(seed=seed)
         else:
             obs = self.env.reset(seed=seed)

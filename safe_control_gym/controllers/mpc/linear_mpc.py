@@ -8,6 +8,7 @@ Based on:
 
 from copy import deepcopy
 from sys import platform
+from time import time
 
 import casadi as cs
 import numpy as np
@@ -247,14 +248,19 @@ class LinearMPC(MPC):
             opti.set_initial(x_var, self.x_prev)
             opti.set_initial(u_var, self.u_prev)
         # Solve the optimization problem.
+        mpc_solve_start = time()
         try:
             sol = opti.solve()
+            mpc_solve_time = time() - mpc_solve_start
             x_val, u_val = sol.value(x_var), sol.value(u_var)
             self.x_prev = x_val
             self.u_prev = u_val
             self.results_dict['horizon_states'].append(deepcopy(self.x_prev) + self.X_EQ[:, None])
             self.results_dict['horizon_inputs'].append(deepcopy(self.u_prev) + self.U_EQ[:, None])
+            self.results_dict['mpc_solve_time'].append(mpc_solve_time)
         except RuntimeError:
+            mpc_solve_time = time() - mpc_solve_start
+            self.results_dict['mpc_solve_time'].append(mpc_solve_time)
             print(colored('Infeasible MPC Problem', 'red'))
             return_status = opti.return_status()
             print(colored(f'Optimization failed with status: {return_status}', 'red'))

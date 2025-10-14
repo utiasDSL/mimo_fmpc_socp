@@ -3,6 +3,7 @@ import os
 import shutil
 from copy import deepcopy
 from datetime import datetime
+from time import time
 
 import casadi as cs
 import numpy as np
@@ -363,6 +364,7 @@ class LinearMPC_ACADOS(MPC):
         self.acados_ocp_solver.set(self.T, 'yref', y_ref_e)
 
         # solve the optimization problem
+        mpc_solve_start = time()
         try:
             if self.use_RTI:
                 # preparation phase
@@ -374,6 +376,8 @@ class LinearMPC_ACADOS(MPC):
                 status = self.acados_ocp_solver.solve()
             else:
                 status = self.acados_ocp_solver.solve()
+
+            mpc_solve_time = time() - mpc_solve_start
 
             # get the open-loop solution
             if self.x_prev is None and self.u_prev is None:
@@ -394,6 +398,7 @@ class LinearMPC_ACADOS(MPC):
             print(f'acados returned status {status}. SQP iterations: {n_sqp_iter}. QP iterations: {n_qp_iter}.')
 
         except Exception:
+            mpc_solve_time = time() - mpc_solve_start
             print(colored('Infeasible MPC Problem', 'red'))
             # get the solver status
             self.acados_ocp_solver.print_statistics()
@@ -409,6 +414,7 @@ class LinearMPC_ACADOS(MPC):
         self.results_dict['horizon_states'].append(deepcopy(self.x_prev))
         self.results_dict['horizon_inputs'].append(deepcopy(self.u_prev))
         self.results_dict['goal_states'].append(deepcopy(goal_states))
+        self.results_dict['mpc_solve_time'].append(mpc_solve_time)
 
         self.prev_action = action
 

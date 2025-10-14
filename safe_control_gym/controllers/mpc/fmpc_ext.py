@@ -200,6 +200,7 @@ class FlatMPC_EXT(BaseController):
                              'state': [],
                              'state_error': [],
                              't_wall': [],
+                             'mpc_solve_time': [],
                             'z_inp':[],
                             'v_inp':[],
                             'u_ext':[]
@@ -246,7 +247,8 @@ class FlatMPC_EXT(BaseController):
         self.results_dict['z_inp'].append(zd)
         self.results_dict['v_inp'].append(vd)
         self.results_dict['u_ext'].append(action_extended)
-        
+        self.results_dict['mpc_solve_time'].append(self.mpc.results_dict['mpc_solve_time'][-1])
+
         return action
     
     def close(self):
