@@ -72,66 +72,166 @@ def run_controller_trials(controller_name, env_func, ctrl_func, initial_states, 
         gui (bool): Whether to show GUI
 
     Returns:
-        dict: Aggregated trajectory data from all trials
-        dict: Aggregated metrics from all trials
+        dict: Aggregated trajectory data from successful trials
+        dict: Aggregated metrics from successful trials
+        list: List of failed trial information with partial trajectories
     """
+    from copy import deepcopy
+
     n_trials = len(initial_states)
     print(f'\n{"="*80}')
     print(f'Running {controller_name} on {n_trials} trials...')
     print(f'{"="*80}\n')
 
-    all_trajs = defaultdict(list)
+    successful_trajs = defaultdict(list)
+    failed_runs = []
 
     for trial_idx, init_state in enumerate(initial_states):
         print(f'  Trial {trial_idx+1}/{n_trials} - init_state: {init_state}')
 
-        # Create environment with fixed (non-randomized) initial state
-        env = env_func(gui=gui, randomized_init=False, init_state=init_state)
-        train_env = env_func(gui=False, randomized_init=False, init_state=init_state)
+        env = None
+        train_env = None
+        ctrl = None
+        experiment = None
 
-        # Create controller
-        ctrl = ctrl_func()
+        try:
+            # Create environment with fixed (non-randomized) initial state
+            env = env_func(gui=gui, randomized_init=False, init_state=init_state)
+            train_env = env_func(gui=False, randomized_init=False, init_state=init_state)
 
-        # Create experiment
-        experiment = BaseExperiment(env=env, ctrl=ctrl, train_env=train_env)
-        experiment.launch_training()
+            # Create controller
+            ctrl = ctrl_func()
 
-        # Run evaluation for this trial (1 episode)
-        trajs_data, _ = experiment.run_evaluation(training=True, n_episodes=1, verbose=False)
+            # Create experiment
+            experiment = BaseExperiment(env=env, ctrl=ctrl, train_env=train_env)
+            experiment.launch_training()
 
-        # Collect trajectory data
-        for key, value in trajs_data.items():
-            all_trajs[key] += value
+            # Run evaluation for this trial (1 episode)
+            trajs_data, _ = experiment.run_evaluation(training=True, n_episodes=1, verbose=False)
 
-        # Clean up
-        env.close()
-        train_env.close()
-        ctrl.close()
+            # Success: collect trajectory data
+            for key, value in trajs_data.items():
+                successful_trajs[key] += value
 
-        print(f'    Trial {trial_idx+1} completed.\n')
+            print(f'    Trial {trial_idx+1} completed.\n')
 
-    # Compute aggregated metrics across all trials
+        except Exception as e:
+            # Failure: extract partial trajectory data
+            print(f'    Trial {trial_idx+1} FAILED: {type(e).__name__}')
+            print(f'    Error: {str(e)[:200]}')
+
+            partial_trajs = None
+            timestep_failed = 0
+
+            try:
+                # Try to get partial trajectory from controller
+                if experiment is not None and hasattr(experiment, 'ctrl') and hasattr(experiment.ctrl, 'results_dict'):
+                    ctrl_data = experiment.ctrl.results_dict
+
+                    # Check if there's actual data
+                    if ctrl_data and isinstance(ctrl_data, dict):
+                        obs_list = ctrl_data.get('obs', [])
+                        if len(obs_list) > 0:
+                            timestep_failed = len(obs_list)
+                            # Deep copy to preserve data
+                            partial_trajs = {}
+                            for key, value in ctrl_data.items():
+                                try:
+                                    partial_trajs[key] = deepcopy(value)
+                                except:
+                                    # Some objects can't be deep copied
+                                    try:
+                                        partial_trajs[key] = value.copy() if hasattr(value, 'copy') else value
+                                    except:
+                                        partial_trajs[key] = None
+            except Exception as extract_error:
+                print(f'    Warning: Could not extract partial trajectory: {extract_error}')
+                partial_trajs = None
+
+            failure_info = {
+                'trial_idx': trial_idx,
+                'init_state': init_state.copy(),
+                'error_type': type(e).__name__,
+                'error_msg': str(e)[:500],  # Truncate long error messages
+                'timestep_failed': timestep_failed,
+                'partial_trajectory': partial_trajs,
+                'has_partial_data': partial_trajs is not None
+            }
+            failed_runs.append(failure_info)
+
+            if timestep_failed > 0:
+                print(f'    Partial trajectory saved ({timestep_failed} timesteps)\n')
+            else:
+                print(f'    No partial trajectory data available\n')
+
+        finally:
+            # Clean up resources (important even on failure!)
+            try:
+                if env is not None:
+                    env.close()
+            except:
+                pass
+            try:
+                if train_env is not None:
+                    train_env.close()
+            except:
+                pass
+            try:
+                if ctrl is not None:
+                    ctrl.close()
+            except:
+                pass
+
+    # Compute aggregated metrics across successful trials only
+    n_successful = len(successful_trajs.get('obs', []))
+    n_failed = len(failed_runs)
+
     print(f'Computing aggregated metrics for {controller_name}...')
-    all_trajs = dict(all_trajs)
+    print(f'  Successful trials: {n_successful}')
+    print(f'  Failed trials: {n_failed}')
 
-    # Use the experiment's metric extractor to compute statistics
-    from safe_control_gym.experiments.base_experiment import MetricExtractor
-    metric_extractor = MetricExtractor()
+    if n_successful > 0:
+        successful_trajs = dict(successful_trajs)
 
-    # We need a MAX_STEPS value - get it from the environment
-    temp_env = env_func(gui=False)
-    MAX_STEPS = int(temp_env.CTRL_FREQ * temp_env.EPISODE_LEN_SEC)
-    temp_env.close()
+        # Use the experiment's metric extractor to compute statistics
+        from safe_control_gym.experiments.base_experiment import MetricExtractor
+        metric_extractor = MetricExtractor()
 
-    metrics = metric_extractor.compute_metrics(data=all_trajs, max_steps=MAX_STEPS, verbose=False)
+        # We need a MAX_STEPS value - get it from the environment
+        temp_env = env_func(gui=False)
+        MAX_STEPS = int(temp_env.CTRL_FREQ * temp_env.EPISODE_LEN_SEC)
+        temp_env.close()
 
-    print(f'{controller_name} completed: {n_trials} trials')
-    print(f'  Average RMSE: {metrics["average_rmse"]:.4f} ± {metrics["rmse_std"]:.4f}')
-    print(f'  Average inference time: {np.mean(metrics["avarage_inference_time"]):.4f}s')
-    print(f'  Failure rate: {metrics["failure_rate"]:.2%}')
-    print()
+        metrics = metric_extractor.compute_metrics(data=successful_trajs, max_steps=MAX_STEPS, verbose=False)
 
-    return all_trajs, metrics
+        # Add success/failure statistics
+        metrics['n_trials'] = n_trials
+        metrics['n_successful'] = n_successful
+        metrics['n_failed'] = n_failed
+        metrics['success_rate'] = n_successful / n_trials if n_trials > 0 else 0
+
+        print(f'{controller_name} completed:')
+        print(f'  Average RMSE: {metrics["average_rmse"]:.4f} ± {metrics["rmse_std"]:.4f}')
+        print(f'  Average inference time: {np.mean(metrics["avarage_inference_time"]):.4f}s')
+        print(f'  Success rate: {metrics["success_rate"]:.2%}')
+        print()
+    else:
+        # No successful trials
+        print(f'{controller_name}: All trials failed!')
+        metrics = {
+            'n_trials': n_trials,
+            'n_successful': 0,
+            'n_failed': n_failed,
+            'success_rate': 0.0,
+            'average_rmse': 0.0,
+            'rmse_std': 0.0,
+            'failure_rate': 0.0,
+            'avarage_inference_time': [0.0]
+        }
+        successful_trajs = {}
+        print()
+
+    return successful_trajs, metrics, failed_runs
 
 
 def compute_second_half_rmse(trajs_data):
@@ -367,11 +467,21 @@ def save_results(output_dir, initial_states, seeds, results_dict):
 
     # Save each controller's results
     for controller_name, data in results_dict.items():
+        # Save successful trials with trajectory data and metrics
         filename = f'{controller_name}_trials.pkl'
         filepath = os.path.join(output_dir, filename)
         with open(filepath, 'wb') as f:
             pickle.dump(data, f)
         print(f'Saved {controller_name} results to {filepath}')
+
+        # Save failed trials separately if there are any
+        if 'failed_runs' in data and len(data['failed_runs']) > 0:
+            failed_filename = f'{controller_name}_failed_trials.pkl'
+            failed_filepath = os.path.join(output_dir, failed_filename)
+            with open(failed_filepath, 'wb') as f:
+                pickle.dump(data['failed_runs'], f)
+            print(f'Saved {controller_name} failed trials to {failed_filepath} '
+                  f'({len(data["failed_runs"])} failures)')
 
     # Save aggregated metrics summary
     metrics_summary = {}
@@ -393,14 +503,62 @@ def print_summary_table(results_dict):
     print('SUMMARY: Monte Carlo Experiment Results')
     print('='*80)
 
-    # Header
-    print(f'\n{"Metric":<30} | {"NMPC":>15} | {"FMPC":>15} | {"FMPC+SOCP":>15}')
-    print('-'*80)
-
     # Extract metrics
     nmpc_metrics = results_dict.get('nmpc', {}).get('metrics', {})
     fmpc_metrics = results_dict.get('fmpc', {}).get('metrics', {})
     fmpc_socp_metrics = results_dict.get('fmpc_socp', {}).get('metrics', {})
+
+    # Print trial statistics first
+    print('\n' + '='*80)
+    print('TRIAL STATISTICS')
+    print('='*80)
+    print(f'\n{"Statistic":<30} | {"NMPC":>15} | {"FMPC":>15} | {"FMPC+SOCP":>15}')
+    print('-'*80)
+
+    # Number of trials
+    nmpc_n_trials = nmpc_metrics.get('n_trials', 0)
+    fmpc_n_trials = fmpc_metrics.get('n_trials', 0)
+    fmpc_socp_n_trials = fmpc_socp_metrics.get('n_trials', 0)
+
+    print(f'{"Total Trials":<30} | {nmpc_n_trials:>15d} | '
+          f'{fmpc_n_trials:>15d} | '
+          f'{fmpc_socp_n_trials:>15d}')
+
+    # Successful trials
+    nmpc_n_success = nmpc_metrics.get('n_successful', 0)
+    fmpc_n_success = fmpc_metrics.get('n_successful', 0)
+    fmpc_socp_n_success = fmpc_socp_metrics.get('n_successful', 0)
+
+    print(f'{"Successful Trials":<30} | {nmpc_n_success:>15d} | '
+          f'{fmpc_n_success:>15d} | '
+          f'{fmpc_socp_n_success:>15d}')
+
+    # Failed trials
+    nmpc_n_failed = nmpc_metrics.get('n_failed', 0)
+    fmpc_n_failed = fmpc_metrics.get('n_failed', 0)
+    fmpc_socp_n_failed = fmpc_socp_metrics.get('n_failed', 0)
+
+    print(f'{"Failed Trials":<30} | {nmpc_n_failed:>15d} | '
+          f'{fmpc_n_failed:>15d} | '
+          f'{fmpc_socp_n_failed:>15d}')
+
+    # Success rate
+    nmpc_success_rate = nmpc_metrics.get('success_rate', 0)
+    fmpc_success_rate = fmpc_metrics.get('success_rate', 0)
+    fmpc_socp_success_rate = fmpc_socp_metrics.get('success_rate', 0)
+
+    print(f'{"Success Rate (%)":<30} | {nmpc_success_rate*100:>15.1f} | '
+          f'{fmpc_success_rate*100:>15.1f} | '
+          f'{fmpc_socp_success_rate*100:>15.1f}')
+
+    print('-'*80)
+
+    # Performance metrics (computed over successful trials only)
+    print('\n' + '='*80)
+    print('PERFORMANCE METRICS (Successful Trials Only)')
+    print('='*80)
+    print(f'\n{"Metric":<30} | {"NMPC":>15} | {"FMPC":>15} | {"FMPC+SOCP":>15}')
+    print('-'*80)
 
     # Full trajectory RMSE
     print(f'{"Average RMSE (m)":<30} | {nmpc_metrics.get("average_rmse", 0):>15.4f} | '
@@ -525,8 +683,8 @@ def run_monte_carlo_experiment(mode='normal', n_trials=2, base_seed=42, gui=Fals
         env_func = partial(make, config.task, **config.task_config)
         ctrl_func = partial(make, config.algo, env_func, **config.algo_config)
 
-        trajs, metrics = run_controller_trials('NMPC', env_func, ctrl_func, initial_states, gui)
-        results_dict['nmpc'] = {'trajs_data': trajs, 'metrics': metrics}
+        trajs, metrics, failed_runs = run_controller_trials('NMPC', env_func, ctrl_func, initial_states, gui)
+        results_dict['nmpc'] = {'trajs_data': trajs, 'metrics': metrics, 'failed_runs': failed_runs}
 
     # Run FMPC
     if run_fmpc:
@@ -539,8 +697,8 @@ def run_monte_carlo_experiment(mode='normal', n_trials=2, base_seed=42, gui=Fals
         env_func = partial(make, config.task, **config.task_config)
         ctrl_func = partial(make, config.algo, env_func, **config.algo_config)
 
-        trajs, metrics = run_controller_trials('FMPC', env_func, ctrl_func, initial_states, gui)
-        results_dict['fmpc'] = {'trajs_data': trajs, 'metrics': metrics}
+        trajs, metrics, failed_runs = run_controller_trials('FMPC', env_func, ctrl_func, initial_states, gui)
+        results_dict['fmpc'] = {'trajs_data': trajs, 'metrics': metrics, 'failed_runs': failed_runs}
 
     # Run FMPC+SOCP
     if run_fmpc_socp:
@@ -553,8 +711,8 @@ def run_monte_carlo_experiment(mode='normal', n_trials=2, base_seed=42, gui=Fals
         env_func = partial(make, config.task, **config.task_config)
         ctrl_func = partial(make, config.algo, env_func, **config.algo_config)
 
-        trajs, metrics = run_controller_trials('FMPC+SOCP', env_func, ctrl_func, initial_states, gui)
-        results_dict['fmpc_socp'] = {'trajs_data': trajs, 'metrics': metrics}
+        trajs, metrics, failed_runs = run_controller_trials('FMPC+SOCP', env_func, ctrl_func, initial_states, gui)
+        results_dict['fmpc_socp'] = {'trajs_data': trajs, 'metrics': metrics, 'failed_runs': failed_runs}
 
     # Save results
     save_results(output_dir, initial_states, seeds, results_dict)
