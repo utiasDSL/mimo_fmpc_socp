@@ -9,7 +9,7 @@ import pickle
 import gpytorch
 from safe_control_gym.controllers.mpc.flat_gp_utils import ZeroMeanAffineGP, GaussianProcess
 import matplotlib.pyplot as plt
-
+from time import time
 
 # Make @profile decorator optional (only available when running with kernprof)
 try:
