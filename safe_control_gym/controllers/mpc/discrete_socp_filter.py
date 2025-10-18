@@ -276,11 +276,12 @@ class DiscreteSOCPFilter:
             #'MSK_IPAR_NUM_THREADS': 4,  # sometimes single-thread is faster for small problems
         }
         self.prob.solve(solver='MOSEK', warm_start=True, verbose=True, mosek_params=mosek_params)
-        #solver_opts = {'iterative_refinement_enable': False,
+        #solver_opts = {'iterative_refinement_enable': True,
         #               'tol_feas': 1e-6,
         #               'tol_gap_abs': 1e-6,  # Add this
         #               'tol_gap_rel': 1e-6,  # Add this
         #    }
+        #solver_opts = {}
         #self.prob.solve(solver=cp.CLARABEL, warm_start=True, verbose=True, **solver_opts)
 
         if 'optimal' in self.prob.status:
