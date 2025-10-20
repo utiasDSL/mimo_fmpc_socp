@@ -165,4 +165,7 @@ gpmpc_update/
 temp
 models/
 
+# CVXPYgen generated solver code
+generated_socp_code/
+
 *.pkl

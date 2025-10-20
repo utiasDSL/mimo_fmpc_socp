@@ -1,6 +1,7 @@
 import numpy as np
 from numpy.linalg import norm
 import cvxpy as cp
+import cvxpygen as cpg
 import torch
 
 # for testing on its own
@@ -19,11 +20,16 @@ except NameError:
         return func
 
 class DiscreteSOCPFilter:
-    def __init__(self, gps, ctrl_mat, input_bound, normalization_vect = np.ones((6,)), slack_weights=[25.0, 250000.0, 25.0], beta_sqrt = [2, 2], state_bound=None, thrust_bound=None, dyn_ext_mat=None):
+    def __init__(self, gps, ctrl_mat, input_bound, normalization_vect = np.ones((6,)), slack_weights=[25.0, 250000.0, 25.0], beta_sqrt = [2, 2], state_bound=None, thrust_bound=None, dyn_ext_mat=None, use_cvxpygen=False, cvxpygen_opts=None):
 
         self.gps = gps
-        self.d_weights = slack_weights # for slack variable, = 2*sqrt(rho) in formulas, 2 components        
+        self.d_weights = slack_weights # for slack variable, = 2*sqrt(rho) in formulas, 2 components
         self.beta_sqrt = beta_sqrt # sqrt(beta_i) in formulas
+
+        # CVXPYgen configuration
+        self.use_cvxpygen = use_cvxpygen
+        self.cvxpygen_opts = cvxpygen_opts or {}
+        self.cvxpygen_solver = None
 
         # get matrices for stability constraint
         self.Ad = ctrl_mat['Ad']
@@ -33,11 +39,10 @@ class DiscreteSOCPFilter:
         self.P = ctrl_mat['P']
         self.K = ctrl_mat['K']
 
-        self.norm_z = normalization_vect[:4]      
+        self.norm_z = normalization_vect[:4]
         self.norm_u = normalization_vect[4:]
 
         self.input_bound_normalized = input_bound/self.norm_u # normalize the input and state bound for optimization
-        self.state_bound = state_bound
 
         # precompute quantity for stability filter
         W3_mat_comp = self.Ad - self.Bd @ self.K
@@ -65,7 +70,8 @@ class DiscreteSOCPFilter:
         cs = [self.c1, self.c2, self.c3]
         ds = [self.d1, self.d2, self.d3]
 
-        # state bound
+        # state bound - ALWAYS create parameters for fixed problem structure
+        self.constrain_state = state_bound is not None
         if state_bound is not None:
             self.h = state_bound['h']
             self.bcon = state_bound['b']
@@ -78,20 +84,22 @@ class DiscreteSOCPFilter:
 
             self.w_s1 = quantile*np.sqrt(h1.T @ bd1 @ bd1.T @ h1)[0]
             self.w_s2 = quantile*np.sqrt(h2.T @ bd2 @ bd2.T @ h2)[0]
-
-            self.Astate = cp.Parameter(shape=(8, 7))
-            self.bstate = cp.Parameter(shape=(8,))
-            self.cstate = cp.Parameter(shape=(1, 7))
-            self.dstate = cp.Parameter()
-            As.append(self.Astate)
-            bs.append(self.bstate)
-            cs.append(self.cstate)
-            ds.append(self.dstate)
         else:
-            self.Astate = None
-            self.bstate = None
-            self.cstate = None
-            self.dstate = None
+            # Dummy values - constraint will be made inactive via large d value
+            self.h = np.zeros((8, 1))
+            self.bcon = 0.0
+            self.w_s1 = 1.0  # arbitrary, won't be used
+            self.w_s2 = 1.0  # arbitrary, won't be used
+
+        # Always create state constraint parameters (for fixed problem structure)
+        self.Astate = cp.Parameter(shape=(8, 7))
+        self.bstate = cp.Parameter(shape=(8,))
+        self.cstate = cp.Parameter(shape=(1, 7))
+        self.dstate = cp.Parameter()
+        As.append(self.Astate)
+        bs.append(self.bstate)
+        cs.append(self.cstate)
+        ds.append(self.dstate)
 
         # create SOC constraints
         m = len(As)
@@ -105,32 +113,245 @@ class DiscreteSOCPFilter:
             A_inp[0, 0] = 1.0
             A_inp[1, 1] = 1.0
             constraints = constraints + [A_inp @ self.X <= self.input_bound_normalized]
-            constraints = constraints + [-self.input_bound_normalized <= A_inp @ self.X] 
+            constraints = constraints + [-self.input_bound_normalized <= A_inp @ self.X]
 
-        # bound on thrust, with compensation of dynamic extension
-        self.thrust_bound_applied = False
+        # bound on thrust, with compensation of dynamic extension - ALWAYS create for fixed problem structure
+        self.constrain_thrust = thrust_bound is not None
         if thrust_bound is not None:
-            self.thrust_bound_applied = True
+            self.thrust_bound = thrust_bound
             # matrices for dynamic extension
             Ad_dyn_ext = dyn_ext_mat['Ad']
             Bd_dyn_ext = dyn_ext_mat['Bd']
-            # constraint for dynamic extension
-            self.eta = cp.Parameter(shape=(2,))
-            # selection_mat = np.zeros((1, 2))
-            # selection_mat[0, 0] = 1.0
-            unnormalize_mat = np.zeros((2,7))
-            unnormalize_mat[0, 0] = self.norm_u[0]
-            unnormalize_mat[1, 1] = self.norm_u[1]
-            slacking_vect = np.zeros((1, 7))
-            slacking_vect[0, 4] = 1.0
-            constraints = constraints + [(Ad_dyn_ext @ self.eta + Bd_dyn_ext @ unnormalize_mat @ self.X)[0] <= thrust_bound + slacking_vect @ self.X] # better as SOC constraint??
+        else:
+            # Dummy values - constraint will be made inactive via large thrust_bound
+            self.thrust_bound = 1e10  # Huge value makes constraint always satisfied
+            # Need dummy matrices for dynamic extension (won't be used)
+            Ad_dyn_ext = np.eye(2)
+            Bd_dyn_ext = np.eye(2)
+
+        # Always create thrust constraint parameters (for fixed problem structure)
+        self.eta = cp.Parameter(shape=(2,))
+        self.Ad_dyn_ext = Ad_dyn_ext
+        self.Bd_dyn_ext = Bd_dyn_ext
+        unnormalize_mat = np.zeros((2,7))
+        unnormalize_mat[0, 0] = self.norm_u[0]
+        unnormalize_mat[1, 1] = self.norm_u[1]
+        self.unnormalize_mat = unnormalize_mat
+        slacking_vect = np.zeros((1, 7))
+        slacking_vect[0, 4] = 1.0
+        # Always add the constraint
+        constraints = constraints + [(Ad_dyn_ext @ self.eta + Bd_dyn_ext @ unnormalize_mat @ self.X)[0] <= self.thrust_bound + slacking_vect @ self.X]
 
             
         # define cost function
-        self.cost = cp.Parameter(shape=(1, 7))  
+        self.cost = cp.Parameter(shape=(1, 7))
 
-        # setup optimization problem      
+        # setup optimization problem
         self.prob = cp.Problem(cp.Minimize(self.cost @ self.X), constraints)
+
+        # Generate compiled solver if CVXPYgen is enabled
+        if self.use_cvxpygen:
+            self._generate_compiled_solver()
+
+    def _get_problem_hash(self):
+        """Generate a hash of the problem structure to detect if cached code is still valid"""
+        import hashlib
+        import json
+
+        structure = {
+            'nx': self.Ad.shape[0],  # State dimension
+            'nu': self.Bd.shape[1],  # Input dimension
+            'constrain_state': self.constrain_state,
+            'constrain_thrust': self.constrain_thrust,
+            'num_constraints': len(self.prob.constraints),
+            'num_parameters': len(self.prob.parameters()),
+            'num_variables': len(self.prob.variables()),
+            'solver': self.cvxpygen_opts.get('solver', 'MOSEK'),
+            'solver_opts': self.cvxpygen_opts.get('solver_opts', {}),  # Include solver options in hash
+        }
+
+        hash_str = json.dumps(structure, sort_keys=True)
+        return hashlib.md5(hash_str.encode()).hexdigest()
+
+    def _get_or_create_cache_dir(self):
+        """Get or create the cache directory for compiled solver code"""
+        cache_base = self.cvxpygen_opts.get('cache_dir', './generated_socp_code')
+
+        # Create subdirectory based on problem hash for different configurations
+        problem_hash = self._get_problem_hash()
+        cache_dir = os.path.join(cache_base, f'socp_{problem_hash}')
+
+        os.makedirs(cache_dir, exist_ok=True)
+
+        # Save hash info for validation
+        hash_file = os.path.join(cache_dir, 'problem_hash.txt')
+        if not os.path.exists(hash_file):
+            with open(hash_file, 'w') as f:
+                f.write(problem_hash)
+
+        return cache_dir
+
+    def _is_cached_valid(self, code_dir):
+        """Check if cached compiled solver exists and matches current problem structure"""
+        # Check if directory exists
+        if not os.path.exists(code_dir):
+            return False
+
+        # Check if hash file exists and matches
+        hash_file = os.path.join(code_dir, 'problem_hash.txt')
+        if not os.path.exists(hash_file):
+            return False
+
+        with open(hash_file, 'r') as f:
+            cached_hash = f.read().strip()
+
+        current_hash = self._get_problem_hash()
+
+        if cached_hash != current_hash:
+            return False
+
+        # Check if the compiled Python module exists
+        cpg_module = os.path.join(code_dir, 'cpg_solver.py')
+        if not os.path.exists(cpg_module):
+            return False
+
+        return True
+
+    def _load_compiled_solver(self, code_dir):
+        """Load a previously compiled solver from the cache directory"""
+        import sys
+        import importlib.util
+
+        # Add code directory to path
+        if code_dir not in sys.path:
+            sys.path.insert(0, code_dir)
+
+        # Fix the relative import in cpg_solver.py (CVXPYgen generates invalid relative imports)
+        solver_py = os.path.join(code_dir, 'cpg_solver.py')
+        if os.path.exists(solver_py):
+            with open(solver_py, 'r') as f:
+                content = f.read()
+
+            # Replace relative import with absolute import
+            if 'from ..' in content:
+                # Extract the actual module path and replace with direct import
+                import re
+                match = re.search(r'from \.\.([\w/.]+) import cpg_module', content)
+                if match:
+                    fixed_content = content.replace(
+                        f'from ..{match.group(1)} import cpg_module',
+                        'import cpg_module'
+                    )
+                    with open(solver_py, 'w') as f:
+                        f.write(fixed_content)
+
+        # Import the generated module
+        module_path = os.path.join(code_dir, 'cpg_solver.py')
+        spec = importlib.util.spec_from_file_location("cpg_solver", module_path)
+        cpg_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cpg_module)
+
+        # Create solver instance
+        return cpg_module.cpg_solve
+
+    def _patch_clarabel_unicode(self, code_dir):
+        """
+        Fix Unicode characters in Clarabel-generated header files for GCC 9.x compatibility.
+
+        The Clarabel solver uses Greek letter μ (mu) in its C header files, which causes
+        compilation errors on GCC 9.x. This patches the generated headers to use ASCII 'mu'.
+        """
+        import os
+
+        header_file = os.path.join(code_dir, 'c', 'solver_code', 'include', 'c', 'DefaultInfo.h')
+
+        if not os.path.exists(header_file):
+            # Header file doesn't exist - might be a different Clarabel version or structure
+            return
+
+        try:
+            # Read the header file
+            with open(header_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Replace Unicode μ with ASCII mu
+            if 'μ' in content:
+                patched_content = content.replace('μ', 'mu')
+
+                # Write back the patched content
+                with open(header_file, 'w', encoding='utf-8') as f:
+                    f.write(patched_content)
+
+                print(f"Patched Unicode characters in {header_file}")
+        except Exception as e:
+            print(f"Warning: Failed to patch Clarabel headers: {e}")
+            print("Compilation may fail on older GCC versions")
+
+    def _generate_compiled_solver(self):
+        """Generate and compile the SOCP solver using CVXPYgen"""
+        from cvxpygen import cpg
+
+        code_dir = self._get_or_create_cache_dir()
+
+        # Check if we can use cached version
+        if self._is_cached_valid(code_dir) and not self.cvxpygen_opts.get('force_regenerate', False):
+            print(f"Loading cached CVXPYgen solver from {code_dir}")
+            try:
+                self.cvxpygen_solver = self._load_compiled_solver(code_dir)
+                print("Successfully loaded cached solver")
+                return
+            except Exception as e:
+                print(f"Warning: Failed to load cached solver: {e}")
+                print("Regenerating solver...")
+
+        # Generate new solver
+        print(f"Generating CVXPYgen solver code in {code_dir}")
+        print("This may take a minute on first run...")
+
+        solver = self.cvxpygen_opts.get('solver', 'CLARABEL')
+
+        # Get solver options - these get compiled into the C code
+        # NOTE: For Clarabel, these are BAKED IN and cannot be changed at runtime
+        solver_opts = self.cvxpygen_opts.get('solver_opts', None)
+
+        # Debug: print solver options being used
+        if solver_opts:
+            print(f"CVXPYgen: Compiling with solver options: {solver_opts}")
+            print(f"CVXPYgen: NOTE - These settings are baked in and cannot be changed at runtime")
+
+        try:
+            # Generate code from the existing CVXPY problem WITHOUT wrapper
+            # We'll patch the headers first, then compile manually
+            print(f"Generating code with CVXPYgen ...")
+            cpg.generate_code(
+                self.prob,
+                code_dir=code_dir,
+                solver=solver,
+                solver_opts=solver_opts,  # Settings compiled into generated code
+                wrapper=False  # Don't compile yet - patch first
+            )
+            print("CVXPYgen finished generating code.")
+
+            # Fix Unicode characters in generated Clarabel headers (GCC 9.x compatibility)
+            if solver == 'CLARABEL':
+                self._patch_clarabel_unicode(code_dir)
+
+            # Now compile the Python wrapper
+            print("Compiling python wrapper with CVXPYgen ... ")
+            from cvxpygen.cpg import compile_python_module
+            compile_python_module(code_dir)
+
+            print(f"Code generation complete. Loading compiled solver...")
+
+            # Load the generated solver
+            self.cvxpygen_solver = self._load_compiled_solver(code_dir)
+
+            print("CVXPYgen solver ready!")
+
+        except Exception as e:
+            print(f"Error generating CVXPYgen solver: {e}")
+            print("Falling back to standard CVXPY.")
+            self.use_cvxpygen = False
 
     @profile
     def compute_feedback_input(self, z, z_ref, v_des, eta= np.zeros((2,)),  x_init=np.zeros((7,)), **kwargs):
@@ -210,22 +431,24 @@ class DiscreteSOCPFilter:
 
         self.A3.value = A3 # note: in thesis: A2 and A3 flipped
 
-        # dynamic extension constraint: set previous value of extension states
-        if self.thrust_bound_applied:
-            self.eta.value = eta
+        # dynamic extension constraint: always update eta (for fixed problem structure)
+        self.eta.value = eta
 
-        # # Compute state constraints.
+        # Compute state constraints - always update (for fixed problem structure)
         state_time = 0.0
-        if self.state_bound is not None:
-            state_start = time()
-            Astate, bstate, cstate, dstate = state_con_matrices(z, gam1, gam2, gam3, gam4, L_gam5, Linv_gam5,
-                                                                self.h, self.bcon, self.Ad, self.Bd, self.w_s1, self.w_s2)
+        state_start = time()
+        Astate, bstate, cstate, dstate = state_con_matrices(z, gam1, gam2, gam3, gam4, L_gam5, Linv_gam5,
+                                                            self.h, self.bcon, self.Ad, self.Bd, self.w_s1, self.w_s2)
 
-            self.Astate.value = Astate
-            self.bstate.value = bstate.squeeze()
-            self.cstate.value = cstate
-            self.dstate.value = dstate.squeeze()
-            state_time = time() - state_start
+        # If state constraint is disabled, make it inactive with huge RHS value
+        if not self.constrain_state:
+            dstate = 1e10  # Makes ||Ax + b|| <= cx + d always satisfied
+
+        self.Astate.value = Astate
+        self.bstate.value = bstate.squeeze()
+        self.cstate.value = cstate
+        self.dstate.value = dstate.squeeze()
+        state_time = time() - state_start
 
         param_time = time() - param_start
 
@@ -267,25 +490,74 @@ class DiscreteSOCPFilter:
         success = False
         logging_dict = {}
         self.X.value = x_init
-        mosek_params = {
-            'MSK_DPAR_INTPNT_CO_TOL_REL_GAP': 1e-6,  # default 1e-8
-            'MSK_DPAR_INTPNT_CO_TOL_PFEAS': 1e-6,    # primal feasibility, default 1e-8
-            'MSK_DPAR_INTPNT_CO_TOL_DFEAS': 1e-6,    # dual feasibility, default 1e-8
-            #'MSK_IPAR_INTPNT_BASIS': 0,  # disable crossover to basic solution
-            #'MSK_IPAR_OPTIMIZER': 'MSK_OPTIMIZER_INTPNT',  # ensure interior-point method
-            #'MSK_IPAR_NUM_THREADS': 4,  # sometimes single-thread is faster for small problems
-        }
-        self.prob.solve(solver='MOSEK', warm_start=True, verbose=True, mosek_params=mosek_params)
-        #solver_opts = {'iterative_refinement_enable': True,
-        #               'tol_feas': 1e-6,
-        #               'tol_gap_abs': 1e-6,  # Add this
-        #               'tol_gap_rel': 1e-6,  # Add this
-        #    }
-        #solver_opts = {}
-        #self.prob.solve(solver=cp.CLARABEL, warm_start=True, verbose=True, **solver_opts)
 
-        if 'optimal' in self.prob.status:
-            success = True
+        # Solve using appropriate backend
+        solve_start = time()
+        if self.use_cvxpygen:
+            # Use CVXPYgen compiled solver
+            try:
+                # CVXPYgen solver: updated_params=None means "update all parameters"
+                # The solver reads values from self.prob.param_dict automatically
+                # NOTE: Solver settings (tolerances, max_iter, etc.) are baked into the compiled code
+                # and cannot be changed at runtime for Clarabel
+                self.cvxpygen_solver(self.prob, updated_params=None)
+
+                # Extract solution (CVXPYgen populates self.X.value)
+                solve_time = time() - solve_start
+
+                # Check solve status from prob object
+                # Clarabel status codes (see https://oxfordcontrol.github.io/ClarabelDocs/):
+                # 1 = Solved, 2 = PrimalInfeasible, 3 = DualInfeasible, 4 = AlmostSolved,
+                # 5 = AlmostPrimalInfeasible, 6 = AlmostDualInfeasible, 7 = MaxIterations,
+                # 8 = MaxTime, 9 = NumericalError, -1 = Unsolved
+                if isinstance(self.prob.status, str):
+                    if self.prob.status.startswith('1 '):
+                        # Solved - optimal solution found
+                        success = True
+                    elif self.prob.status.startswith('4 '):
+                        # AlmostSolved - solution found but tolerances not fully met
+                        # Accept it with a warning
+                        success = True
+                        print(f'SOCP: CVXPYgen/Clarabel status 4 (AlmostSolved) - using solution')
+                    else:
+                        success = False
+                        print(f'SOCP: CVXPYgen/Clarabel failed with status: {self.prob.status}')
+                elif self.prob.status in ['optimal', 'optimal_inaccurate']:
+                    success = True
+                else:
+                    success = False
+                    print(f'SOCP: CVXPYgen/Clarabel status: {self.prob.status}')
+
+            except Exception as e:
+                print(f'SOCP: CVXPYgen solver failed: {e}')
+                success = False
+                solve_time = time() - solve_start
+        else:
+            # Use standard CVXPY solver
+            mosek_params = {
+                'MSK_DPAR_INTPNT_CO_TOL_REL_GAP': 1e-6,  # default 1e-8
+                'MSK_DPAR_INTPNT_CO_TOL_PFEAS': 1e-6,    # primal feasibility, default 1e-8
+                'MSK_DPAR_INTPNT_CO_TOL_DFEAS': 1e-6,    # dual feasibility, default 1e-8
+                #'MSK_IPAR_INTPNT_BASIS': 0,  # disable crossover to basic solution
+                #'MSK_IPAR_OPTIMIZER': 'MSK_OPTIMIZER_INTPNT',  # ensure interior-point method
+                #'MSK_IPAR_NUM_THREADS': 4,  # sometimes single-thread is faster for small problems
+            }
+            self.prob.solve(solver='MOSEK', warm_start=True, verbose=True, mosek_params=mosek_params)
+            #solver_opts = {'iterative_refinement_enable': True,
+            #               'tol_feas': 1e-6,
+            #               'tol_gap_abs': 1e-6,  # Add this
+            #               'tol_gap_rel': 1e-6,  # Add this
+            #    }
+            #solver_opts = {}
+            #self.prob.solve(solver=cp.CLARABEL, warm_start=True, verbose=True, **solver_opts)
+
+            if 'optimal' in self.prob.status:
+                success = True
+                solve_time = self.prob.solver_stats.solve_time
+            else:
+                solve_time = time() - solve_start
+
+        if success:
             # debugging: compute the covariance at this input u: just sample from GP
             # u_opt = self.X.value[0:2]
             # mean0 = gam1[0] + gam2[0].T@u_opt
@@ -296,7 +568,6 @@ class DiscreteSOCPFilter:
             # covs = [cov0, cov1]
             # cost_val = self.cost.value@self.X.value
             # cost_val_lin_part = self.cost.value[0, 0]*self.X.value[0] + self.cost.value[0, 1]*self.X.value[1]
-            solve_time = self.prob.solver_stats.solve_time
             # logging_dict['means'] = means
             # logging_dict['covs'] = covs
             # logging_dict['cost'] = cost_val
@@ -313,11 +584,24 @@ class DiscreteSOCPFilter:
             logging_dict['state_time'] = state_time
             logging_dict['param_time'] = param_time
 
-            return self.X.value[0:2]*self.norm_u, success, self.X.value, logging_dict   
-        
+            return self.X.value[0:2]*self.norm_u, success, self.X.value, logging_dict
+
         else:
-            print('SOCP: Solver failed to find an optimial solution')
-            return np.array((0, 0)), 0, 0, 0, 0, 0, [0,0], [0,0]
+            print('SOCP: Solver failed to find an optimal solution')
+            # Return same 4 values as success case: (action, success, X_value, logging_dict)
+            # This applies to both CVXPYgen and MOSEK solvers
+            # Include all timing fields to prevent KeyError in calling code
+            failure_logging_dict = {
+                'solve_time': solve_time,
+                'gp_time': gp_time,
+                'cholesky_time': cholesky_time,
+                'cost_time': cost_time,
+                'dummy_time': dummy_time,
+                'stab_time': stab_time,
+                'state_time': state_time,
+                'param_time': param_time
+            }
+            return np.array([0.0, 0.0]), False, np.zeros(7), failure_logging_dict
 
 def get_gammas(z_query, gp_model): 
     query_np = np.hstack((z_query, np.zeros(2))) # zeros as dummy inputs u, to make proper length. get removed in compute_gammas()

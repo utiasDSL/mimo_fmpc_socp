@@ -33,8 +33,14 @@ algo_config:
     input_bound:
       - 10
       - 1.5
-    apply_thrust_constraint: False  
+    apply_thrust_constraint: False
     # thrust_max: 0.43
+    cvxpygen:
+      enabled: true
+      solver: 'CLARABEL'
+      cache_dir: './generated_socp_code'
+      force_regenerate: false
+      verbose: false
   
   flat_state_constraint:
     apply_state_bound: False

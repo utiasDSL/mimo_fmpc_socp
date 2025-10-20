@@ -33,8 +33,24 @@ algo_config:
     input_bound:
       - 10
       - 1.5
-    apply_thrust_constraint: True  
+    apply_thrust_constraint: True
     thrust_max: 0.43
+    cvxpygen:
+      enabled: false 
+      solver: 'CLARABEL'
+      cache_dir: './generated_socp_code'
+      force_regenerate: true
+      verbose: true
+      # Solver options - these get compiled into the generated code
+      # NOTE: For Clarabel with CVXPYgen, these settings are BAKED IN at code generation
+      # and CANNOT be changed at runtime. To change them, you must set force_regenerate: true
+      solver_opts:
+        tol_gap_abs: 1.0e-6
+        tol_gap_rel: 1.0e-6
+        tol_feas: 1.0e-6
+        iterative_refinement_enable: true
+        max_iter: 200
+        verbose: true
   
   flat_state_constraint:
     apply_state_bound: True
