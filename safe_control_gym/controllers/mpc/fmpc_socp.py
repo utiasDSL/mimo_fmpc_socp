@@ -343,15 +343,20 @@ class FlatMPC_SOCP(BaseController):
         Returns:
             action (ndarray): Input/action to the task/env.
         '''
+        # Track total time to identify overhead
+        total_start = time()
+
         # get flat state estimation from observer
         observer_start = time()
         z_obs = self.fs_obs.compute_observation(obs)
         observer_time = time() - observer_start
 
         # run MPC controller
+        mpc_start = time()
         v = self.mpc.select_action(z_obs)
         z_horizon = self.mpc.x_prev #8xN set in linearMPC
         v_horizon = self.mpc.u_prev #2xN
+        mpc_total_time = time() - mpc_start
 
         # flat input transformation: z and v to action u
         flat_transform_start = time()
@@ -361,7 +366,9 @@ class FlatMPC_SOCP(BaseController):
         action_extended = _get_u_from_flat_states_2D_att_ext(zd, vd, self.inertial_prop, self.mpc.env.GRAVITY_ACC)
         flat_transform_time = time() - flat_transform_start
 
+        socp_start = time()
         action_extended_socp, success, self.socp_opt, socp_logging = self.filter.compute_feedback_input(zd, z_ref, vd, self.eta)
+        socp_total_time = time() - socp_start
 
         action_extended_used = action_extended_socp
         # action_extended_used = action_extended
@@ -398,6 +405,17 @@ class FlatMPC_SOCP(BaseController):
         self.results_dict['thrust_dot'].append(self.eta[1])
         self.results_dict['gp_time'].append(socp_logging['gp_time'])
         self.results_dict['mpc_solve_time'].append(self.mpc.results_dict['mpc_solve_time'][-1])
+
+        # Copy MPC warm-start timing breakdown from internal MPC controller
+        mpc_timing_fields = ['mpc_extract_time_1', 'mpc_extract_time_2', 'mpc_logging_time_1',
+                             'mpc_logging_time_2', 'mpc_state_extract_time', 'mpc_input_extract_time',
+                             'mpc_deepcopy_state_time', 'mpc_deepcopy_input_time', 'mpc_deepcopy_goal_time']
+        for field in mpc_timing_fields:
+            if field in self.mpc.results_dict and len(self.mpc.results_dict[field]) > 0:
+                if field not in self.results_dict:
+                    self.results_dict[field] = []
+                self.results_dict[field].append(self.mpc.results_dict[field][-1])
+
         self.results_dict['observer_time'].append(observer_time)
         self.results_dict['flat_transform_time'].append(flat_transform_time)
         self.results_dict['cholesky_time'].append(socp_logging['cholesky_time'])
@@ -410,6 +428,22 @@ class FlatMPC_SOCP(BaseController):
         self.results_dict['observer_update_time'].append(observer_update_time)
         logging_time = time() - logging_start
         self.results_dict['logging_time'].append(logging_time)
+
+        # Compute total time and overhead
+        total_time = time() - total_start
+        measured_time = (observer_time + mpc_total_time + flat_transform_time + socp_total_time +
+                        dyn_ext_time + observer_update_time + logging_time)
+        overhead_time = total_time - measured_time
+
+        # Store additional timing metrics
+        self.results_dict['total_select_action_time'] = self.results_dict.get('total_select_action_time', [])
+        self.results_dict['total_select_action_time'].append(total_time)
+        self.results_dict['mpc_total_time'] = self.results_dict.get('mpc_total_time', [])
+        self.results_dict['mpc_total_time'].append(mpc_total_time)
+        self.results_dict['socp_total_time'] = self.results_dict.get('socp_total_time', [])
+        self.results_dict['socp_total_time'].append(socp_total_time)
+        self.results_dict['overhead_time'] = self.results_dict.get('overhead_time', [])
+        self.results_dict['overhead_time'].append(overhead_time)
 
         return action
     
