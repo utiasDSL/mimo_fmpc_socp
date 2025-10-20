@@ -594,15 +594,40 @@ class DiscreteSOCPFilter:
             }
             return np.array([0.0, 0.0]), False, np.zeros(7), failure_logging_dict
 
-def get_gammas(z_query, gp_model): 
-    query_np = np.hstack((z_query, np.zeros(2))) # zeros as dummy inputs u, to make proper length. get removed in compute_gammas()
-    query = torch.from_numpy(query_np).double().unsqueeze(0)
-    gamma1, gamma2, gamma3, gamma4, gamma5 = gp_model.model.compute_gammas(query)
-    gamma1 = gamma1.numpy().squeeze()
-    gamma2 = gamma2.numpy().squeeze()
-    gamma3 = gamma3.numpy().squeeze()
-    gamma4 = gamma4.numpy().squeeze()
-    gamma5 = gamma5.numpy().squeeze()
+def get_gammas(z_query, gp_model):
+    """
+    Compute gammas from GP model.
+
+    Supports both GPyTorch GaussianProcess and FastGPNumpy implementations.
+
+    Args:
+        z_query: numpy array - flat state (without control input)
+        gp_model: Either GaussianProcess (GPyTorch) or FastGPNumpy
+
+    Returns:
+        gamma1, gamma2, gamma3, gamma4, gamma5: numpy arrays
+    """
+    # Check if using FastGPNumpy (has compute_gammas as direct method)
+    if hasattr(gp_model, 'compute_gammas') and not hasattr(gp_model, 'model'):
+        # FastGPNumpy path - already returns numpy arrays
+        gamma1, gamma2, gamma3, gamma4, gamma5 = gp_model.compute_gammas(z_query)
+        # Squeeze to ensure consistent shape
+        gamma1 = gamma1.squeeze()
+        gamma2 = gamma2.squeeze()
+        gamma3 = gamma3.squeeze()
+        gamma4 = gamma4.squeeze()
+        gamma5 = gamma5.squeeze()
+    else:
+        # GPyTorch path - need to convert from torch tensors
+        query_np = np.hstack((z_query, np.zeros(2)))  # zeros as dummy inputs u, to make proper length
+        query = torch.from_numpy(query_np).double().unsqueeze(0)
+        gamma1, gamma2, gamma3, gamma4, gamma5 = gp_model.model.compute_gammas(query)
+        gamma1 = gamma1.numpy().squeeze()
+        gamma2 = gamma2.numpy().squeeze()
+        gamma3 = gamma3.numpy().squeeze()
+        gamma4 = gamma4.numpy().squeeze()
+        gamma5 = gamma5.numpy().squeeze()
+
     return gamma1, gamma2, gamma3, gamma4, gamma5
 
 def compute_cost(gam1, gam2, gam4, v_des):

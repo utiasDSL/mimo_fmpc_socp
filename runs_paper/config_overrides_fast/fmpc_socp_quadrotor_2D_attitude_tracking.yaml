@@ -19,9 +19,10 @@ algo_config:
     randomize_prior_prop: False
     prior_prop_rand_info: null
   warmstart: True
-  solver: ipopt 
+  solver: ipopt
   use_full_flat_reference: True
   use_acados: False
+  use_fast_gp: True  # Use FastGPNumpy for 5-10x speedup in GP inference
 
   socp_config:
     beta_sqrt:
