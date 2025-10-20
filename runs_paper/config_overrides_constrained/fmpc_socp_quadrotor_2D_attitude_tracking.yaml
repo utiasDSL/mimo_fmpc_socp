@@ -19,7 +19,7 @@ algo_config:
     randomize_prior_prop: False
     prior_prop_rand_info: null
   warmstart: True
-  solver: qpoases 
+  solver: ipopt 
   use_full_flat_reference: True
   use_acados: true 
 
