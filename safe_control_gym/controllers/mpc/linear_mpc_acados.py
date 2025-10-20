@@ -339,15 +339,23 @@ class LinearMPC_ACADOS(MPC):
             if self.x_guess is None or self.u_guess is None:
                 # compute initial guess with IPOPT
                 self.compute_initial_guess(obs)
-            for idx in range(self.T + 1):
-                init_x = self.x_guess[:, idx]
-                self.acados_ocp_solver.set(idx, 'x', init_x)
-            for idx in range(self.T):
-                if nu == 1:
-                    init_u = np.array([self.u_guess[idx]])
-                else:
-                    init_u = self.u_guess[:, idx]
-                self.acados_ocp_solver.set(idx, 'u', init_u)
+            #for idx in range(self.T + 1):
+            #    init_x = self.x_guess[:, idx]
+            #    self.acados_ocp_solver.set(idx, 'x', init_x)
+            self.acados_ocp_solver.set_flat('x',self.x_guess.T.flatten())
+
+            #for idx in range(self.T):
+            #    if nu == 1:
+            #        init_u = np.array([self.u_guess[idx]])
+            #    else:
+            #        init_u = self.u_guess[:, idx]
+            #    self.acados_ocp_solver.set(idx, 'u', init_u)
+            if nu == 1:
+                init_u = np.array([self.u_guess])
+            else:
+                init_u = self.u_guess
+
+            self.acados_ocp_solver.set_flat('u', init_u.T.flatten())
 
         # set reference for the control horizon
         goal_states = self.get_references()
@@ -358,8 +366,10 @@ class LinearMPC_ACADOS(MPC):
         x_ref = goal_states[:, :-1] - np.repeat(self.x_lin.reshape(-1, 1), self.T, axis=1)
         u_ref = np.repeat(self.U_EQ.reshape(-1, 1) - self.u_lin.reshape(-1, 1), self.T, axis=1)
         y_ref = np.concatenate((x_ref, u_ref), axis=0)
+        # Seems like you can't use set_flat (which is much faster) for custom named variables.
         for idx in range(self.T):
             self.acados_ocp_solver.set(idx, 'yref', y_ref[:, idx])
+        #self.acados_ocp_solver.set_flat('yref',y_ref.flatten())
         y_ref_e = goal_states[:, -1]
         self.acados_ocp_solver.set(self.T, 'yref', y_ref_e)
 
@@ -380,17 +390,28 @@ class LinearMPC_ACADOS(MPC):
             mpc_solve_time = time() - mpc_solve_start
 
             # get the open-loop solution
+            extract_start = time()
             if self.x_prev is None and self.u_prev is None:
                 self.x_prev = np.zeros((nx, self.T + 1))
                 self.u_prev = np.zeros((nu, self.T))
             if self.u_prev is not None and nu == 1:
                 self.u_prev = self.u_prev.reshape((1, -1))
-            for i in range(self.T + 1):
-                self.x_prev[:, i] = self.acados_ocp_solver.get(i, 'x')
-            for i in range(self.T):
-                self.u_prev[:, i] = self.acados_ocp_solver.get(i, 'u')
+
+            state_extract_start = time()
+            #for i in range(self.T + 1):
+            #    self.x_prev[:, i] = self.acados_ocp_solver.get(i, 'x')
+            self.x_prev = self.acados_ocp_solver.get_flat('x').reshape((self.T + 1, nx)).T
+            state_extract_time = time() - state_extract_start
+
+            input_extract_start = time()
+            #for i in range(self.T):
+            #    self.u_prev[:, i] = self.acados_ocp_solver.get(i, 'u')
+            self.u_prev = self.acados_ocp_solver.get_flat('u').reshape((self.T, nu)).T
+            input_extract_time = time() - input_extract_start
+
             if nu == 1:
                 self.u_prev = self.u_prev.flatten()
+            extract_time_1 = time() - extract_start
 
             # get the solver status
             n_sqp_iter = self.acados_ocp_solver.get_stats('sqp_iter')
@@ -407,35 +428,132 @@ class LinearMPC_ACADOS(MPC):
             # OPTIONAL: shift the x_prev and u_prev and copy the last state
             # self.x_prev = np.concatenate((self.x_guess[:, 1:], np.atleast_2d(self.x_guess[:, -1]).T), axis=1)
             # self.u_prev = np.concatenate((self.u_guess[:, 1:], np.atleast_2d(self.u_guess[:, -1]).T), axis=1)
+        action_extract_start = time()
         action = self.acados_ocp_solver.get(0, 'u')
+        action_extract_time = time() - action_extract_start
 
+        guess_assign_start = time()
         self.x_guess = self.x_prev
         self.u_guess = self.u_prev
-        self.results_dict['horizon_states'].append(deepcopy(self.x_prev))
-        self.results_dict['horizon_inputs'].append(deepcopy(self.u_prev))
-        self.results_dict['goal_states'].append(deepcopy(goal_states))
+        guess_assign_time = time() - guess_assign_start
+
+        logging_start = time()
+        deepcopy_state_start = time()
+        horizon_states_copy = deepcopy(self.x_prev)
+        deepcopy_state_time = time() - deepcopy_state_start
+
+        deepcopy_input_start = time()
+        horizon_inputs_copy = deepcopy(self.u_prev)
+        deepcopy_input_time = time() - deepcopy_input_start
+
+        deepcopy_goal_start = time()
+        goal_states_copy = deepcopy(goal_states)
+        deepcopy_goal_time = time() - deepcopy_goal_start
+
+        self.results_dict['horizon_states'].append(horizon_states_copy)
+        self.results_dict['horizon_inputs'].append(horizon_inputs_copy)
+        self.results_dict['goal_states'].append(goal_states_copy)
         self.results_dict['mpc_solve_time'].append(mpc_solve_time)
+        logging_time_1 = time() - logging_start
 
         self.prev_action = action
 
-        # get the open-loop solution
+        # get the open-loop solution (DUPLICATE BLOCK 2)
+        extract_start_2 = time()
         if self.x_prev is None and self.u_prev is None:
             self.x_prev = np.zeros((nx, self.T + 1))
             self.u_prev = np.zeros((nu, self.T))
         if self.u_prev is not None and nu == 1:
             self.u_prev = self.u_prev.reshape((1, -1))
-        for i in range(self.T + 1):
-            self.x_prev[:, i] = self.acados_ocp_solver.get(i, 'x')
-        for i in range(self.T):
-            self.u_prev[:, i] = self.acados_ocp_solver.get(i, 'u')
+
+        state_extract_start_2 = time()
+        #for i in range(self.T + 1):
+        #    self.x_prev[:, i] = self.acados_ocp_solver.get(i, 'x')
+        self.x_prev = self.acados_ocp_solver.get_flat('x').reshape((self.T + 1, nx)).T
+        state_extract_time_2 = time() - state_extract_start_2
+
+        input_extract_start_2 = time()
+        #for i in range(self.T):
+        #    self.u_prev[:, i] = self.acados_ocp_solver.get(i, 'u')
+        self.u_prev = self.acados_ocp_solver.get_flat('u').reshape((self.T, nu)).T    
+        input_extract_time_2 = time() - input_extract_start_2
+
         if nu == 1:
             self.u_prev = self.u_prev.flatten()
+        extract_time_2 = time() - extract_start_2
 
+        guess_assign_start_2 = time()
         self.x_guess = self.x_prev
         self.u_guess = self.u_prev
-        self.results_dict['horizon_states'].append(deepcopy(self.x_prev))
-        self.results_dict['horizon_inputs'].append(deepcopy(self.u_prev))
-        self.results_dict['goal_states'].append(deepcopy(goal_states))
+        guess_assign_time_2 = time() - guess_assign_start_2
+
+        logging_start_2 = time()
+        deepcopy_state_start_2 = time()
+        horizon_states_copy_2 = deepcopy(self.x_prev)
+        deepcopy_state_time_2 = time() - deepcopy_state_start_2
+
+        deepcopy_input_start_2 = time()
+        horizon_inputs_copy_2 = deepcopy(self.u_prev)
+        deepcopy_input_time_2 = time() - deepcopy_input_start_2
+
+        deepcopy_goal_start_2 = time()
+        goal_states_copy_2 = deepcopy(goal_states)
+        deepcopy_goal_time_2 = time() - deepcopy_goal_start_2
+
+        self.results_dict['horizon_states'].append(horizon_states_copy_2)
+        self.results_dict['horizon_inputs'].append(horizon_inputs_copy_2)
+        self.results_dict['goal_states'].append(goal_states_copy_2)
+        logging_time_2 = time() - logging_start_2
+
+        # Print timing breakdown
+        print(f"\n=== MPC Warm-start Timing Breakdown ===")
+        print(f"Block 1 - Solution extraction:")
+        print(f"  State extraction (41 gets):  {state_extract_time*1000:.3f}ms")
+        print(f"  Input extraction (40 gets):  {input_extract_time*1000:.3f}ms")
+        print(f"  Total extraction 1:          {extract_time_1*1000:.3f}ms")
+        print(f"Block 1 - Logging:")
+        print(f"  deepcopy(x_prev):            {deepcopy_state_time*1000:.3f}ms")
+        print(f"  deepcopy(u_prev):            {deepcopy_input_time*1000:.3f}ms")
+        print(f"  deepcopy(goal_states):       {deepcopy_goal_time*1000:.3f}ms")
+        print(f"  Total logging 1:             {logging_time_1*1000:.3f}ms")
+        print(f"\nBlock 2 - Solution extraction (DUPLICATE):")
+        print(f"  State extraction (41 gets):  {state_extract_time_2*1000:.3f}ms")
+        print(f"  Input extraction (40 gets):  {input_extract_time_2*1000:.3f}ms")
+        print(f"  Total extraction 2:          {extract_time_2*1000:.3f}ms")
+        print(f"Block 2 - Logging (DUPLICATE):")
+        print(f"  deepcopy(x_prev):            {deepcopy_state_time_2*1000:.3f}ms")
+        print(f"  deepcopy(u_prev):            {deepcopy_input_time_2*1000:.3f}ms")
+        print(f"  deepcopy(goal_states):       {deepcopy_goal_time_2*1000:.3f}ms")
+        print(f"  Total logging 2:             {logging_time_2*1000:.3f}ms")
+        print(f"\nOther operations:")
+        print(f"  Action extraction:           {action_extract_time*1000:.3f}ms")
+        print(f"  Guess assignment 1:          {guess_assign_time*1000:.3f}ms")
+        print(f"  Guess assignment 2:          {guess_assign_time_2*1000:.3f}ms")
+        print(f"\nTOTAL OVERHEAD (excl solve): {(extract_time_1 + logging_time_1 + extract_time_2 + logging_time_2 + action_extract_time + guess_assign_time + guess_assign_time_2)*1000:.3f}ms")
+        print(f"DUPLICATE WASTE:             {(extract_time_2 + logging_time_2)*1000:.3f}ms")
+        print(f"======================================\n")
+
+        # Store timing data in results_dict for later analysis
+        if 'mpc_extract_time_1' not in self.results_dict:
+            self.results_dict['mpc_extract_time_1'] = []
+            self.results_dict['mpc_extract_time_2'] = []
+            self.results_dict['mpc_logging_time_1'] = []
+            self.results_dict['mpc_logging_time_2'] = []
+            self.results_dict['mpc_state_extract_time'] = []
+            self.results_dict['mpc_input_extract_time'] = []
+            self.results_dict['mpc_deepcopy_state_time'] = []
+            self.results_dict['mpc_deepcopy_input_time'] = []
+            self.results_dict['mpc_deepcopy_goal_time'] = []
+
+        self.results_dict['mpc_extract_time_1'].append(extract_time_1)
+        self.results_dict['mpc_extract_time_2'].append(extract_time_2)
+        self.results_dict['mpc_logging_time_1'].append(logging_time_1)
+        self.results_dict['mpc_logging_time_2'].append(logging_time_2)
+        self.results_dict['mpc_state_extract_time'].append(state_extract_time)
+        self.results_dict['mpc_input_extract_time'].append(input_extract_time)
+        self.results_dict['mpc_deepcopy_state_time'].append(deepcopy_state_time)
+        self.results_dict['mpc_deepcopy_input_time'].append(deepcopy_input_time)
+        self.results_dict['mpc_deepcopy_goal_time'].append(deepcopy_goal_time)
 
         # recover the action
         action += self.u_lin.flatten()

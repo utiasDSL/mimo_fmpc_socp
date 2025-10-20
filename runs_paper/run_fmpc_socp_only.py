@@ -83,6 +83,21 @@ def extract_data(data_file):
         dyn_ext_time = np.array(ctrl_data.get('dyn_ext_time', [0]))
         observer_update_time = np.array(ctrl_data.get('observer_update_time', [0]))
         logging_time = np.array(ctrl_data.get('logging_time', [0]))
+        # New timing metrics
+        total_select_action_time = np.array(ctrl_data.get('total_select_action_time', [0]))
+        mpc_total_time = np.array(ctrl_data.get('mpc_total_time', [0]))
+        socp_total_time = np.array(ctrl_data.get('socp_total_time', [0]))
+        overhead_time = np.array(ctrl_data.get('overhead_time', [0]))
+        # MPC warm-start timing breakdown
+        mpc_extract_time_1 = np.array(ctrl_data.get('mpc_extract_time_1', [0]))
+        mpc_extract_time_2 = np.array(ctrl_data.get('mpc_extract_time_2', [0]))
+        mpc_logging_time_1 = np.array(ctrl_data.get('mpc_logging_time_1', [0]))
+        mpc_logging_time_2 = np.array(ctrl_data.get('mpc_logging_time_2', [0]))
+        mpc_state_extract_time = np.array(ctrl_data.get('mpc_state_extract_time', [0]))
+        mpc_input_extract_time = np.array(ctrl_data.get('mpc_input_extract_time', [0]))
+        mpc_deepcopy_state_time = np.array(ctrl_data.get('mpc_deepcopy_state_time', [0]))
+        mpc_deepcopy_input_time = np.array(ctrl_data.get('mpc_deepcopy_input_time', [0]))
+        mpc_deepcopy_goal_time = np.array(ctrl_data.get('mpc_deepcopy_goal_time', [0]))
     else:
         action_ext = 0
         gp_time = 0
@@ -99,15 +114,35 @@ def extract_data(data_file):
         dyn_ext_time = 0
         observer_update_time = 0
         logging_time = 0
+        total_select_action_time = 0
+        mpc_total_time = 0
+        socp_total_time = 0
+        overhead_time = 0
+        mpc_extract_time_1 = 0
+        mpc_extract_time_2 = 0
+        mpc_logging_time_1 = 0
+        mpc_logging_time_2 = 0
+        mpc_state_extract_time = 0
+        mpc_input_extract_time = 0
+        mpc_deepcopy_state_time = 0
+        mpc_deepcopy_input_time = 0
+        mpc_deepcopy_goal_time = 0
 
     return (states, error, inference_time, rmse, state_ref, action, action_ext, gp_time, socp_solve_time,
             mpc_solve_time, observer_time, flat_transform_time, cholesky_time, cost_time, dummy_time,
-            stab_time, state_time, param_time, dyn_ext_time, observer_update_time, logging_time)
+            stab_time, state_time, param_time, dyn_ext_time, observer_update_time, logging_time,
+            total_select_action_time, mpc_total_time, socp_total_time, overhead_time,
+            mpc_extract_time_1, mpc_extract_time_2, mpc_logging_time_1, mpc_logging_time_2,
+            mpc_state_extract_time, mpc_input_extract_time, mpc_deepcopy_state_time,
+            mpc_deepcopy_input_time, mpc_deepcopy_goal_time)
 
 (state_fmpc_socp, error_fmpc_socp, inf_time_fmpc_socp, rmse_fmpc_socp, state_ref_fmpc_socp, action_fmpc_socp, _,
  gp_time_socp, socp_solve_time, mpc_solve_time, observer_time, flat_transform_time, cholesky_time,
  cost_time, dummy_time, stab_time, state_time, param_time, dyn_ext_time, observer_update_time,
- logging_time) = extract_data(data_path_fmpc_socp)
+ logging_time, total_select_action_time, mpc_total_time, socp_total_time, overhead_time,
+ mpc_extract_time_1, mpc_extract_time_2, mpc_logging_time_1, mpc_logging_time_2,
+ mpc_state_extract_time, mpc_input_extract_time, mpc_deepcopy_state_time,
+ mpc_deepcopy_input_time, mpc_deepcopy_goal_time) = extract_data(data_path_fmpc_socp)
 
 # Print metrics
 end_idx_first_loop = int(np.shape(state_fmpc_socp)[0]/num_loops)
@@ -167,6 +202,45 @@ print('SOCP setup (all):         {:.2f}ms'.format(socp_setup_time*1000))
 print('Sum of measured parts:    {:.2f}ms'.format(measured_components*1000))
 print('Unaccounted overhead:     {:.2f}ms ({:.1f}%)'.format(
     overhead*1000, 100*overhead/np.mean(inf_time_fmpc_socp)))
+
+print('\n--- Overhead Analysis (from select_action) ---')
+print('Total select_action time: {:.2f}ms (avg)'.format(np.mean(total_select_action_time)*1000))
+print('MPC total (incl overhead):{:.2f}ms (avg)'.format(np.mean(mpc_total_time)*1000))
+print('SOCP total (incl overhead):{:.2f}ms (avg)'.format(np.mean(socp_total_time)*1000))
+print('Python/function overhead: {:.2f}ms (avg)  {:.2f}ms (max)'.format(
+    np.mean(overhead_time)*1000, np.max(overhead_time)*1000))
+print('Overhead percentage:      {:.1f}%'.format(
+    100*np.mean(overhead_time)/np.mean(total_select_action_time)))
+
+# Compare total_select_action_time with inf_time to find wrapper overhead
+wrapper_overhead = np.mean(inf_time_fmpc_socp) - np.mean(total_select_action_time)
+print('\nWrapper (experiment) overhead: {:.2f}ms ({:.1f}%)'.format(
+    wrapper_overhead*1000, 100*wrapper_overhead/np.mean(inf_time_fmpc_socp)))
+print('='*60)
+
+print('\n--- MPC Warm-start Breakdown (averages) ---')
+print('Block 1 - Solution Extraction:')
+print('  State extraction (41 gets):  {:.2f}ms'.format(np.mean(mpc_state_extract_time)*1000))
+print('  Input extraction (40 gets):  {:.2f}ms'.format(np.mean(mpc_input_extract_time)*1000))
+print('  Total extraction 1:          {:.2f}ms'.format(np.mean(mpc_extract_time_1)*1000))
+print('Block 1 - Logging (deepcopy):')
+print('  deepcopy(x_prev):            {:.2f}ms'.format(np.mean(mpc_deepcopy_state_time)*1000))
+print('  deepcopy(u_prev):            {:.2f}ms'.format(np.mean(mpc_deepcopy_input_time)*1000))
+print('  deepcopy(goal_states):       {:.2f}ms'.format(np.mean(mpc_deepcopy_goal_time)*1000))
+print('  Total logging 1:             {:.2f}ms'.format(np.mean(mpc_logging_time_1)*1000))
+print('\nBlock 2 - DUPLICATE Extraction:')
+print('  Total extraction 2:          {:.2f}ms'.format(np.mean(mpc_extract_time_2)*1000))
+print('Block 2 - DUPLICATE Logging:')
+print('  Total logging 2:             {:.2f}ms'.format(np.mean(mpc_logging_time_2)*1000))
+print('\nSummary:')
+total_warmstart_overhead = (np.mean(mpc_extract_time_1) + np.mean(mpc_logging_time_1) +
+                             np.mean(mpc_extract_time_2) + np.mean(mpc_logging_time_2))
+duplicate_waste = np.mean(mpc_extract_time_2) + np.mean(mpc_logging_time_2)
+print('  Total warm-start overhead:   {:.2f}ms'.format(total_warmstart_overhead*1000))
+print('  Duplicate waste:             {:.2f}ms ({:.1f}% of total)'.format(
+    duplicate_waste*1000, 100*duplicate_waste/total_warmstart_overhead))
+print('  Percentage of MPC total:     {:.1f}%'.format(
+    100*total_warmstart_overhead/np.mean(mpc_total_time)))
 print('='*60)
 
 print('\nMaximum of inputs')
