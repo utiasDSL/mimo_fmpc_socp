@@ -226,14 +226,19 @@ class FlatMPC_SOCP(BaseController):
         normalization_vect = np.load(normalization_file_path)
         print(f'GP training data normalization vector: {normalization_vect}')
 
-        d_weights = [socp_config.slack_weight_stability, socp_config.slack_weight_dyn_ext, socp_config.slack_weight_state] 
+        d_weights = [socp_config.slack_weight_stability, socp_config.slack_weight_dyn_ext, socp_config.slack_weight_state]
+
+        # Get solver configuration (defaults to CLARABEL if not specified)
+        solver = socp_config.get('solver', 'CLARABEL')
+        solver_options = socp_config.get('solver_options', {})
 
         # initialize SOCP Filter
-        self.filter = DiscreteSOCPFilter(gps, ctrl_mats, np.array(socp_config.input_bound), 
-                                         normalization_vect=normalization_vect, 
-                                         slack_weights=d_weights, beta_sqrt=socp_config.beta_sqrt, 
-                                         thrust_bound=thrust_max, dyn_ext_mat=dyn_ext_mat, 
-                                         state_bound=state_bound)
+        self.filter = DiscreteSOCPFilter(gps, ctrl_mats, np.array(socp_config.input_bound),
+                                         normalization_vect=normalization_vect,
+                                         slack_weights=d_weights, beta_sqrt=socp_config.beta_sqrt,
+                                         thrust_bound=thrust_max, dyn_ext_mat=dyn_ext_mat,
+                                         state_bound=state_bound,
+                                         solver=solver, solver_options=solver_options)
         
         self.socp_opt = np.zeros((5,)) 
 

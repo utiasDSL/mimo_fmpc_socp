@@ -19,11 +19,15 @@ except NameError:
         return func
 
 class DiscreteSOCPFilter:
-    def __init__(self, gps, ctrl_mat, input_bound, normalization_vect = np.ones((6,)), slack_weights=[25.0, 250000.0, 25.0], beta_sqrt = [2, 2], state_bound=None, thrust_bound=None, dyn_ext_mat=None):
+    def __init__(self, gps, ctrl_mat, input_bound, normalization_vect = np.ones((6,)), slack_weights=[25.0, 250000.0, 25.0], beta_sqrt = [2, 2], state_bound=None, thrust_bound=None, dyn_ext_mat=None, solver='CLARABEL', solver_options=None):
 
         self.gps = gps
-        self.d_weights = slack_weights # for slack variable, = 2*sqrt(rho) in formulas, 2 components        
+        self.d_weights = slack_weights # for slack variable, = 2*sqrt(rho) in formulas, 2 components
         self.beta_sqrt = beta_sqrt # sqrt(beta_i) in formulas
+
+        # Solver configuration
+        self.solver = solver
+        self.solver_options = solver_options if solver_options is not None else {}
 
         # get matrices for stability constraint
         self.Ad = ctrl_mat['Ad']
@@ -267,22 +271,19 @@ class DiscreteSOCPFilter:
         success = False
         logging_dict = {}
         self.X.value = x_init
-        mosek_params = {
-            'MSK_DPAR_INTPNT_CO_TOL_REL_GAP': 1e-6,  # default 1e-8
-            'MSK_DPAR_INTPNT_CO_TOL_PFEAS': 1e-6,    # primal feasibility, default 1e-8
-            'MSK_DPAR_INTPNT_CO_TOL_DFEAS': 1e-6,    # dual feasibility, default 1e-8
-            #'MSK_IPAR_INTPNT_BASIS': 0,  # disable crossover to basic solution
-            #'MSK_IPAR_OPTIMIZER': 'MSK_OPTIMIZER_INTPNT',  # ensure interior-point method
-            #'MSK_IPAR_NUM_THREADS': 4,  # sometimes single-thread is faster for small problems
-        }
-        self.prob.solve(solver='MOSEK', warm_start=True, verbose=True, mosek_params=mosek_params)
-        #solver_opts = {'iterative_refinement_enable': True,
-        #               'tol_feas': 1e-6,
-        #               'tol_gap_abs': 1e-6,  # Add this
-        #               'tol_gap_rel': 1e-6,  # Add this
-        #    }
-        #solver_opts = {}
-        #self.prob.solve(solver=cp.CLARABEL, warm_start=True, verbose=True, **solver_opts)
+
+        # Select solver
+        if self.solver.upper() == 'MOSEK':
+            solver_enum = cp.MOSEK
+            self.prob.solve(solver=solver_enum, warm_start=True, verbose=True, mosek_params=self.solver_options)
+        elif self.solver.upper() == 'CLARABEL':
+            solver_enum = cp.CLARABEL
+            self.prob.solve(solver=solver_enum, warm_start=True, verbose=True, **self.solver_options)
+        else:
+            raise ValueError(f"Unsupported solver: {self.solver}. Choose 'MOSEK' or 'CLARABEL'.")
+
+        # Solve the SOCP problem with configured solver and options
+        #self.prob.solve(solver=solver_enum, warm_start=True, verbose=True, **self.solver_options)
 
         if 'optimal' in self.prob.status:
             success = True

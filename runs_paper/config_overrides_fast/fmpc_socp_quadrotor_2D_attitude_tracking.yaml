@@ -33,8 +33,20 @@ algo_config:
     input_bound:
       - 10
       - 1.5
-    apply_thrust_constraint: False  
+    apply_thrust_constraint: False
     # thrust_max: 0.43
+    # Solver configuration
+    solver: CLARABEL  # Options: 'MOSEK' or 'CLARABEL'
+    solver_options:
+      # CLARABEL options (uncomment to use)
+      iterative_refinement_enable: true
+      tol_feas: 1.0e-6
+      tol_gap_abs: 1.0e-6
+      tol_gap_rel: 1.0e-6
+      # MOSEK options (uncomment when using MOSEK solver)
+      # MSK_DPAR_INTPNT_CO_TOL_REL_GAP: 1.0e-6
+      # MSK_DPAR_INTPNT_CO_TOL_PFEAS: 1.0e-6
+      # MSK_DPAR_INTPNT_CO_TOL_DFEAS: 1.0e-6
   
   flat_state_constraint:
     apply_state_bound: False
