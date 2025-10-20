@@ -43,6 +43,7 @@ class DiscreteSOCPFilter:
         self.norm_u = normalization_vect[4:]
 
         self.input_bound_normalized = input_bound/self.norm_u # normalize the input and state bound for optimization
+        self.state_bound = state_bound
 
         # precompute quantity for stability filter
         W3_mat_comp = self.Ad - self.Bd @ self.K
@@ -70,9 +71,10 @@ class DiscreteSOCPFilter:
         cs = [self.c1, self.c2, self.c3]
         ds = [self.d1, self.d2, self.d3]
 
-        # state bound - ALWAYS create parameters for fixed problem structure
-        self.constrain_state = state_bound is not None
+        # state bound
+        self.constrain_state = False
         if state_bound is not None:
+            self.constrain_state = True
             self.h = state_bound['h']
             self.bcon = state_bound['b']
             quantile = state_bound['quantile']
@@ -84,22 +86,20 @@ class DiscreteSOCPFilter:
 
             self.w_s1 = quantile*np.sqrt(h1.T @ bd1 @ bd1.T @ h1)[0]
             self.w_s2 = quantile*np.sqrt(h2.T @ bd2 @ bd2.T @ h2)[0]
-        else:
-            # Dummy values - constraint will be made inactive via large d value
-            self.h = np.zeros((8, 1))
-            self.bcon = 0.0
-            self.w_s1 = 1.0  # arbitrary, won't be used
-            self.w_s2 = 1.0  # arbitrary, won't be used
 
-        # Always create state constraint parameters (for fixed problem structure)
-        self.Astate = cp.Parameter(shape=(8, 7))
-        self.bstate = cp.Parameter(shape=(8,))
-        self.cstate = cp.Parameter(shape=(1, 7))
-        self.dstate = cp.Parameter()
-        As.append(self.Astate)
-        bs.append(self.bstate)
-        cs.append(self.cstate)
-        ds.append(self.dstate)
+            self.Astate = cp.Parameter(shape=(8, 7))
+            self.bstate = cp.Parameter(shape=(8,))
+            self.cstate = cp.Parameter(shape=(1, 7))
+            self.dstate = cp.Parameter()
+            As.append(self.Astate)
+            bs.append(self.bstate)
+            cs.append(self.cstate)
+            ds.append(self.dstate)
+        else:
+            self.Astate = None
+            self.bstate = None
+            self.cstate = None
+            self.dstate = None
 
         # create SOC constraints
         m = len(As)
@@ -115,36 +115,29 @@ class DiscreteSOCPFilter:
             constraints = constraints + [A_inp @ self.X <= self.input_bound_normalized]
             constraints = constraints + [-self.input_bound_normalized <= A_inp @ self.X]
 
-        # bound on thrust, with compensation of dynamic extension - ALWAYS create for fixed problem structure
-        self.constrain_thrust = thrust_bound is not None
+        # bound on thrust, with compensation of dynamic extension
+        self.constrain_thrust = False
+        self.thrust_bound_applied = False
         if thrust_bound is not None:
-            self.thrust_bound = thrust_bound
+            self.thrust_bound_applied = True
+            self.constrain_thrust = True
             # matrices for dynamic extension
             Ad_dyn_ext = dyn_ext_mat['Ad']
             Bd_dyn_ext = dyn_ext_mat['Bd']
-        else:
-            # Dummy values - constraint will be made inactive via large thrust_bound
-            self.thrust_bound = 1e10  # Huge value makes constraint always satisfied
-            # Need dummy matrices for dynamic extension (won't be used)
-            Ad_dyn_ext = np.eye(2)
-            Bd_dyn_ext = np.eye(2)
-
-        # Always create thrust constraint parameters (for fixed problem structure)
-        self.eta = cp.Parameter(shape=(2,))
-        self.Ad_dyn_ext = Ad_dyn_ext
-        self.Bd_dyn_ext = Bd_dyn_ext
-        unnormalize_mat = np.zeros((2,7))
-        unnormalize_mat[0, 0] = self.norm_u[0]
-        unnormalize_mat[1, 1] = self.norm_u[1]
-        self.unnormalize_mat = unnormalize_mat
-        slacking_vect = np.zeros((1, 7))
-        slacking_vect[0, 4] = 1.0
-        # Always add the constraint
-        constraints = constraints + [(Ad_dyn_ext @ self.eta + Bd_dyn_ext @ unnormalize_mat @ self.X)[0] <= self.thrust_bound + slacking_vect @ self.X]
+            # constraint for dynamic extension
+            self.eta = cp.Parameter(shape=(2,))
+            # selection_mat = np.zeros((1, 2))
+            # selection_mat[0, 0] = 1.0
+            unnormalize_mat = np.zeros((2,7))
+            unnormalize_mat[0, 0] = self.norm_u[0]
+            unnormalize_mat[1, 1] = self.norm_u[1]
+            slacking_vect = np.zeros((1, 7))
+            slacking_vect[0, 4] = 1.0
+            constraints = constraints + [(Ad_dyn_ext @ self.eta + Bd_dyn_ext @ unnormalize_mat @ self.X)[0] <= thrust_bound + slacking_vect @ self.X] # better as SOC constraint??
 
             
         # define cost function
-        self.cost = cp.Parameter(shape=(1, 7))
+        self.cost = cp.Parameter(shape=(1, 7))  
 
         # setup optimization problem
         self.prob = cp.Problem(cp.Minimize(self.cost @ self.X), constraints)
@@ -431,24 +424,22 @@ class DiscreteSOCPFilter:
 
         self.A3.value = A3 # note: in thesis: A2 and A3 flipped
 
-        # dynamic extension constraint: always update eta (for fixed problem structure)
-        self.eta.value = eta
+        # dynamic extension constraint: set previous value of extension states
+        if self.thrust_bound_applied:
+            self.eta.value = eta
 
-        # Compute state constraints - always update (for fixed problem structure)
+        # # Compute state constraints.
         state_time = 0.0
-        state_start = time()
-        Astate, bstate, cstate, dstate = state_con_matrices(z, gam1, gam2, gam3, gam4, L_gam5, Linv_gam5,
-                                                            self.h, self.bcon, self.Ad, self.Bd, self.w_s1, self.w_s2)
+        if self.state_bound is not None:
+            state_start = time()
+            Astate, bstate, cstate, dstate = state_con_matrices(z, gam1, gam2, gam3, gam4, L_gam5, Linv_gam5,
+                                                                self.h, self.bcon, self.Ad, self.Bd, self.w_s1, self.w_s2)
 
-        # If state constraint is disabled, make it inactive with huge RHS value
-        if not self.constrain_state:
-            dstate = 1e10  # Makes ||Ax + b|| <= cx + d always satisfied
-
-        self.Astate.value = Astate
-        self.bstate.value = bstate.squeeze()
-        self.cstate.value = cstate
-        self.dstate.value = dstate.squeeze()
-        state_time = time() - state_start
+            self.Astate.value = Astate
+            self.bstate.value = bstate.squeeze()
+            self.cstate.value = cstate
+            self.dstate.value = dstate.squeeze()
+            state_time = time() - state_start
 
         param_time = time() - param_start
 

@@ -342,14 +342,20 @@ class LinearMPC_ACADOS(MPC):
             #for idx in range(self.T + 1):
             #    init_x = self.x_guess[:, idx]
             #    self.acados_ocp_solver.set(idx, 'x', init_x)
-            self.acados_ocp_solver.set_flat('x',self.x_guess.flatten())
+            self.acados_ocp_solver.set_flat('x',self.x_guess.T.flatten())
+
             #for idx in range(self.T):
             #    if nu == 1:
             #        init_u = np.array([self.u_guess[idx]])
             #    else:
             #        init_u = self.u_guess[:, idx]
             #    self.acados_ocp_solver.set(idx, 'u', init_u)
-            self.acados_ocp_solver.set_flat('u', self.u_guess.flatten())
+            if nu == 1:
+                init_u = np.array([self.u_guess])
+            else:
+                init_u = self.u_guess
+
+            self.acados_ocp_solver.set_flat('u', init_u.T.flatten())
 
         # set reference for the control horizon
         goal_states = self.get_references()
@@ -392,11 +398,15 @@ class LinearMPC_ACADOS(MPC):
                 self.u_prev = self.u_prev.reshape((1, -1))
 
             state_extract_start = time()
-            self.x_prev = self.acados_ocp_solver.get_flat('x').reshape((nx, self.T + 1))
+            #for i in range(self.T + 1):
+            #    self.x_prev[:, i] = self.acados_ocp_solver.get(i, 'x')
+            self.x_prev = self.acados_ocp_solver.get_flat('x').reshape((self.T + 1, nx)).T
             state_extract_time = time() - state_extract_start
 
             input_extract_start = time()
-            self.u_prev = self.acados_ocp_solver.get_flat('u').reshape((nu, self.T))
+            #for i in range(self.T):
+            #    self.u_prev[:, i] = self.acados_ocp_solver.get(i, 'u')
+            self.u_prev = self.acados_ocp_solver.get_flat('u').reshape((self.T, nu)).T
             input_extract_time = time() - input_extract_start
 
             if nu == 1:
@@ -457,11 +467,15 @@ class LinearMPC_ACADOS(MPC):
             self.u_prev = self.u_prev.reshape((1, -1))
 
         state_extract_start_2 = time()
-        self.x_prev = self.acados_ocp_solver.get_flat('x').reshape((nx, self.T + 1))
+        #for i in range(self.T + 1):
+        #    self.x_prev[:, i] = self.acados_ocp_solver.get(i, 'x')
+        self.x_prev = self.acados_ocp_solver.get_flat('x').reshape((self.T + 1, nx)).T
         state_extract_time_2 = time() - state_extract_start_2
 
         input_extract_start_2 = time()
-        self.u_prev = self.acados_ocp_solver.get_flat('u').reshape((nu, self.T))    
+        #for i in range(self.T):
+        #    self.u_prev[:, i] = self.acados_ocp_solver.get(i, 'u')
+        self.u_prev = self.acados_ocp_solver.get_flat('u').reshape((self.T, nu)).T    
         input_extract_time_2 = time() - input_extract_start_2
 
         if nu == 1:
