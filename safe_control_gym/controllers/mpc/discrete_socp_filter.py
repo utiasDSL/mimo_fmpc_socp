@@ -489,10 +489,6 @@ class DiscreteSOCPFilter:
 
 
         # Solve the SOCP problem with configured solver and options
-        #self.prob.solve(solver=solver_enum, warm_start=True, verbose=True, **self.solver_options)
-
-        if 'optimal' in self.prob.status:
-            success = True
         # Solve using appropriate backend
         solve_start = time()
         if self.use_cvxpygen:

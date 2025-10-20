@@ -48,7 +48,7 @@ algo_config:
       #MSK_DPAR_INTPNT_CO_TOL_PFEAS: 1.0e-6
       #MSK_DPAR_INTPNT_CO_TOL_DFEAS: 1.0e-6
     cvxpygen:
-      enabled: true 
+      enabled: true
       solver: 'CLARABEL'
       cache_dir: './generated_socp_code'
       force_regenerate: true
