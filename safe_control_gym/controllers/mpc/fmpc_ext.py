@@ -15,7 +15,7 @@ import numpy as np
 from safe_control_gym.controllers.lqr.lqr_utils import discretize_linear_system
 from safe_control_gym.controllers.mpc.mpc import MPC
 from safe_control_gym.controllers.mpc.linear_mpc import LinearMPC
-# from safe_control_gym.controllers.mpc.linear_mpc_acados import LinearMPC_ACADOS
+from safe_control_gym.controllers.mpc.linear_mpc_acados import LinearMPC_ACADOS
 from safe_control_gym.controllers.base_controller import BaseController
 from safe_control_gym.controllers.mpc.mpc_utils import get_cost_weight_matrix
 from safe_control_gym.envs.benchmark_env import Task

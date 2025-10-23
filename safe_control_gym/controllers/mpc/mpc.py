@@ -16,7 +16,27 @@ from safe_control_gym.utils.utils import timing
 from numpy.linalg import LinAlgError
 
 class MPC(BaseController):
-    '''MPC with full nonlinear model.'''
+    '''MPC with full nonlinear model. Can use CasADi or ACADOS solver.'''
+
+    def __new__(cls, env_func, use_acados=False, **kwargs):
+        '''Factory method to create either MPC (CasADi) or MPC_ACADOS instance.
+
+        Args:
+            env_func: Function to create environment
+            use_acados (bool): If True, creates MPC_ACADOS instance. If False, creates standard MPC.
+            **kwargs: Additional arguments passed to the constructor
+
+        Returns:
+            MPC or MPC_ACADOS instance
+        '''
+        if use_acados and cls is MPC:
+            # Import here to avoid circular import issues
+            from safe_control_gym.controllers.mpc.mpc_acados import MPC_ACADOS
+            # Create and return MPC_ACADOS instance instead
+            return MPC_ACADOS(env_func, **kwargs)
+        else:
+            # Create normal MPC instance (or subclass instance)
+            return super().__new__(cls)
 
     def __init__(
             self,
@@ -39,6 +59,7 @@ class MPC(BaseController):
             use_lqr_gain_and_terminal_cost: bool = False,
             init_solver: str = 'ipopt',
             solver: str = 'ipopt',
+            use_acados: bool = False,
             **kwargs
     ):
         '''Creates task and controller.
@@ -60,6 +81,7 @@ class MPC(BaseController):
             use_lqr_gain_and_terminal_cost (bool): Use the LQR ancillary gain and terminal cost in the MPC.
             init_solver (str): Solver to use for initial guess computation.
             solver (str): Solver to use for MPC optimization.
+            use_acados (bool): If True, use ACADOS solver. If False, use CasADi/ipopt (default: False).
         '''
         super().__init__(env_func=env_func, output_dir=output_dir, use_gpu=use_gpu, seed=seed, **kwargs)
         for k, v in locals().items():

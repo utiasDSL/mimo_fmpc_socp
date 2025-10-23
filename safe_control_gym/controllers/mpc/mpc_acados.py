@@ -352,6 +352,8 @@ class MPC_ACADOS(MPC):
         self.acados_ocp_solver.set(self.T, 'yref', y_ref_e)
 
         # solve the optimization problem
+        from time import time
+        mpc_solve_start = time()
         try:
             if self.use_RTI:
                 # preparation phase
@@ -363,6 +365,7 @@ class MPC_ACADOS(MPC):
                 status = self.acados_ocp_solver.solve()
             else:
                 status = self.acados_ocp_solver.solve()
+            mpc_solve_time = time() - mpc_solve_start
 
             # get the open-loop solution
             if self.x_prev is None and self.u_prev is None:
@@ -383,6 +386,7 @@ class MPC_ACADOS(MPC):
             print(f'acados returned status {status}. SQP iterations: {n_sqp_iter}. QP iterations: {n_qp_iter}.')
 
         except Exception:
+            mpc_solve_time = time() - mpc_solve_start
             print(colored('Infeasible MPC Problem', 'red'))
             # get the solver status
             self.acados_ocp_solver.print_statistics()
@@ -399,6 +403,20 @@ class MPC_ACADOS(MPC):
         self.results_dict['horizon_inputs'].append(deepcopy(self.u_prev))
         self.results_dict['goal_states'].append(deepcopy(goal_states))
 
+        # Log MPC solve time (consistent with MPC)
+        self.results_dict['mpc_solve_time'].append(mpc_solve_time)
+
+        # Compute thrust derivatives for logging (consistent with MPC)
+        u_val = self.u_prev
+        if u_val.ndim > 1:
+            self.results_dict['thrust_ddot'].append((self.prev_action[0]-2*u_val[0, 0] + u_val[0, 1])/(self.dt**2))
+            self.results_dict['thrust_dot'].append((-self.prev_action[0]+u_val[0, 0])/self.dt)
+        else:
+            # Handle 1D case
+            self.results_dict['thrust_ddot'].append((self.prev_action[0]-2*u_val[0] + u_val[1])/(self.dt**2))
+            self.results_dict['thrust_dot'].append((-self.prev_action[0]+u_val[0])/self.dt)
+
+        self.prev_prev_action = self.prev_action
         self.prev_action = action
 
         # get the open-loop solution

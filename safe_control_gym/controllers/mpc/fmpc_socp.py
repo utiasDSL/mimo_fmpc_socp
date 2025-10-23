@@ -54,6 +54,7 @@ class FlatMPC_SOCP(BaseController):
             output_dir='results/temp',
             additional_constraints=None,
             use_acados=False,
+            use_fast_gp=True,
             socp_config = dict,
             flat_state_constraint = dict,
             **kwargs):
@@ -72,7 +73,8 @@ class FlatMPC_SOCP(BaseController):
             use_full_flat_reference (bool): Use reference with acceleration and jerk for figure8 and circle trajectories
             output_dir (str): output directory to write logs and results.
             additional_constraints (list): list of constraints.
-            use_acados: run linear MPC with acados or not
+            use_acados (bool): run linear MPC with acados or not
+            use_fast_gp (bool): Use FastGPNumpy for 5-10x speedup in GP inference (default: True)
             socp_config: safety filter configuration
             flat_state_constraint: half space constraint on the flat state
         '''
@@ -190,7 +192,7 @@ class FlatMPC_SOCP(BaseController):
         assert os.path.exists(normalization_file_path), 'cannot find directory of data normalization vector'
 
         # Load GPs with option to use FastGPNumpy
-        use_fast_gp = self.use_fast_gp if hasattr(self, 'use_fast_gp') else True
+        use_fast_gp = self.use_fast_gp
 
         gp_type = ZeroMeanAffineGP
         likelihood_0 = gpytorch.likelihoods.GaussianLikelihood()
