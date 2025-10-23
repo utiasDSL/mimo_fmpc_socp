@@ -52,9 +52,10 @@ elif args.mode == 'constrained':
 
 
 ######### Parameters ###############################
+# Uncomment below to disable specific controllers for debugging
 # RUN_NMPC=False
-RUN_FMPC=False
-RUN_FMPC_SOCP=False
+# RUN_FMPC=False
+# RUN_FMPC_SOCP=False
 
 GUI = False
 
@@ -138,15 +139,17 @@ def extract_data(data_file):
 
     ctrl_data = traj_data['controller_data'][0]
     if 'u_ext' in ctrl_data:
-        thrust_ddot = np.array(ctrl_data['u_ext'][0][:, 0]) # FMPC
+        # FMPC_EXT controller
+        thrust_ddot = np.array(ctrl_data['u_ext'][0][:, 0])
         thrust_dot = np.array(ctrl_data['thrust_dot'][0])
         gp_time = 0
-    elif 'u_extSOCP' in ctrl_data: # or 'gp_time' in ctrl_data:
-        thrust_ddot = np.array(ctrl_data['u_extSOCP'][0][:, 0]) # FMPC_SOCP
+    elif 'u_extSOCP' in ctrl_data:
+        # FMPC_SOCP controller
+        thrust_ddot = np.array(ctrl_data['u_extSOCP'][0][:, 0])
         gp_time = np.array(ctrl_data['gp_time'][0])
         thrust_dot = np.array(ctrl_data['thrust_dot'][0])
     else:
-        action_ext = 0
+        # NMPC controller - thrust_ddot and thrust_dot are stored directly as lists
         gp_time = 0
         thrust_ddot = np.array(ctrl_data['thrust_ddot'][0])
         thrust_dot = np.array(ctrl_data['thrust_dot'][0])

@@ -619,6 +619,210 @@ def print_summary_table(results_dict):
     print_timing_breakdown_table(results_dict)
 
 
+def plot_inference_time_violin(results_dict, output_dir='./monte_carlo_results/normal'):
+    """Create violin plot comparing inference times across controllers.
+
+    Args:
+        results_dict (dict): Dictionary containing results for each controller
+        output_dir (str): Directory to save the plot
+    """
+    import matplotlib.pyplot as plt
+
+    # Define TUM colors
+    tum_blue_3 = '#0073CF'
+    tum_dia_dark_green = '#007C30'
+    tum_dia_dark_orange = '#D64C13'
+
+    # Extract inference time data for each controller
+    data_to_plot = []
+    labels = []
+    colors = []
+
+    # NMPC
+    if 'nmpc' in results_dict:
+        nmpc_trajs = results_dict['nmpc']['trajs_data']
+        nmpc_inf_times = []
+        for traj_inf_time in nmpc_trajs['inference_time_data']:
+            nmpc_inf_times.extend(traj_inf_time)  # Flatten all timesteps from all trials
+        if len(nmpc_inf_times) > 0:
+            data_to_plot.append(np.array(nmpc_inf_times) * 1000)  # Convert to ms
+            labels.append('NMPC')
+            colors.append(tum_blue_3)
+
+    # FMPC (optional)
+    if 'fmpc' in results_dict:
+        fmpc_trajs = results_dict['fmpc']['trajs_data']
+        fmpc_inf_times = []
+        for traj_inf_time in fmpc_trajs['inference_time_data']:
+            fmpc_inf_times.extend(traj_inf_time)
+        if len(fmpc_inf_times) > 0:
+            data_to_plot.append(np.array(fmpc_inf_times) * 1000)  # Convert to ms
+            labels.append('FMPC')
+            colors.append(tum_dia_dark_green)
+
+    # FMPC+SOCP
+    if 'fmpc_socp' in results_dict:
+        fmpc_socp_trajs = results_dict['fmpc_socp']['trajs_data']
+        fmpc_socp_inf_times = []
+        for traj_inf_time in fmpc_socp_trajs['inference_time_data']:
+            fmpc_socp_inf_times.extend(traj_inf_time)
+        if len(fmpc_socp_inf_times) > 0:
+            data_to_plot.append(np.array(fmpc_socp_inf_times) * 1000)  # Convert to ms
+            labels.append('FMPC+SOCP')
+            colors.append(tum_dia_dark_orange)
+
+    if len(data_to_plot) == 0:
+        print("No inference time data available for plotting.")
+        return
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    # Create violin plot
+    parts = ax.violinplot(data_to_plot, positions=range(len(data_to_plot)),
+                          showmeans=True, showmedians=True, showextrema=True)
+
+    # Color the violin plots
+    for i, pc in enumerate(parts['bodies']):
+        pc.set_facecolor(colors[i])
+        pc.set_alpha(0.7)
+        pc.set_edgecolor('black')
+        pc.set_linewidth(1.5)
+
+    # Style the mean, median, and extrema lines
+    parts['cmeans'].set_color('red')
+    parts['cmeans'].set_linewidth(2)
+    parts['cmedians'].set_color('black')
+    parts['cmedians'].set_linewidth(2)
+    parts['cbars'].set_color('black')
+    parts['cmaxes'].set_color('black')
+    parts['cmins'].set_color('black')
+
+    # Add labels and formatting
+    ax.set_xticks(range(len(labels)))
+    ax.set_xticklabels(labels, fontsize=12)
+    ax.set_ylabel('Inference Time (ms)', fontsize=12)
+    ax.set_title('Controller Inference Time Distribution', fontsize=14, fontweight='bold')
+    ax.grid(axis='y', alpha=0.3)
+
+    # Add statistics text
+    for i, (data, label) in enumerate(zip(data_to_plot, labels)):
+        mean_val = np.mean(data)
+        median_val = np.median(data)
+        ax.text(i, ax.get_ylim()[1] * 0.95,
+                f'Mean: {mean_val:.2f}ms\nMedian: {median_val:.2f}ms',
+                ha='center', va='top', fontsize=9,
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
+    plt.tight_layout()
+
+    # Save figure
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, 'inference_time_violin.pdf')
+    plt.savefig(output_path, format='pdf', bbox_inches='tight')
+    print(f'\nViolin plot saved to: {output_path}')
+
+    # Also save as PNG for quick viewing
+    output_path_png = os.path.join(output_dir, 'inference_time_violin.png')
+    plt.savefig(output_path_png, format='png', dpi=300, bbox_inches='tight')
+    print(f'Violin plot (PNG) saved to: {output_path_png}')
+
+
+def plot_tracking_error_distribution(results_dict, output_dir='./monte_carlo_results/normal', ctrl_freq=50):
+    """Create plot showing tracking error distribution over time for each controller.
+
+    Args:
+        results_dict (dict): Dictionary containing results for each controller
+        output_dir (str): Directory to save the plot
+        ctrl_freq (int): Control frequency in Hz (for time axis)
+    """
+    import matplotlib.pyplot as plt
+
+    # Define TUM colors
+    tum_blue_3 = '#0073CF'
+    tum_dia_dark_green = '#007C30'
+    tum_dia_dark_orange = '#D64C13'
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    sample_time = 1.0 / ctrl_freq
+
+    # Process each controller
+    controllers = []
+    if 'nmpc' in results_dict:
+        controllers.append(('nmpc', 'NMPC', tum_blue_3))
+    if 'fmpc' in results_dict:
+        controllers.append(('fmpc', 'FMPC', tum_dia_dark_green))
+    if 'fmpc_socp' in results_dict:
+        controllers.append(('fmpc_socp', 'FMPC+SOCP', tum_dia_dark_orange))
+
+    for ctrl_key, ctrl_label, ctrl_color in controllers:
+        trajs_data = results_dict[ctrl_key]['trajs_data']
+
+        # Extract tracking error (MSE) from info for all trials
+        all_errors = []
+        max_len = 0
+
+        for trial_info in trajs_data['info']:
+            trial_errors = []
+            for info_dict in trial_info:
+                if 'mse' in info_dict:
+                    # Take square root to get RMSE at each timestep
+                    trial_errors.append(np.sqrt(info_dict['mse']))
+                else:
+                    trial_errors.append(0)  # Initial timestep
+
+            all_errors.append(np.array(trial_errors))
+            max_len = max(max_len, len(trial_errors))
+
+        # Pad shorter trajectories with NaN and create matrix
+        error_matrix = np.full((len(all_errors), max_len), np.nan)
+        for i, errors in enumerate(all_errors):
+            error_matrix[i, :len(errors)] = errors
+
+        # Compute mean and std across trials at each timestep
+        # Use nanmean/nanstd to ignore NaN values from shorter trajectories
+        mean_error = np.nanmean(error_matrix, axis=0)
+        std_error = np.nanstd(error_matrix, axis=0)
+
+        # Create time axis
+        time = np.arange(len(mean_error)) * sample_time
+
+        # Convert to millimeters for better readability
+        mean_error_mm = mean_error * 1000
+        std_error_mm = std_error * 1000
+
+        # Plot mean line
+        ax.plot(time, mean_error_mm, color=ctrl_color, linewidth=2.5,
+                label=ctrl_label, alpha=0.9)
+
+        # Plot shaded region for ±1 std
+        ax.fill_between(time,
+                        mean_error_mm - std_error_mm,
+                        mean_error_mm + std_error_mm,
+                        color=ctrl_color, alpha=0.2)
+
+    # Formatting
+    ax.set_xlabel('Time (s)', fontsize=12)
+    ax.set_ylabel('Tracking Error (mm)', fontsize=12)
+    ax.set_title('Tracking Error Distribution Over Time', fontsize=14, fontweight='bold')
+    ax.legend(fontsize=11, loc='best')
+    ax.grid(alpha=0.3)
+
+    plt.tight_layout()
+
+    # Save figure
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, 'tracking_error_distribution.pdf')
+    plt.savefig(output_path, format='pdf', bbox_inches='tight')
+    print(f'\nTracking error distribution plot saved to: {output_path}')
+
+    # Also save as PNG for quick viewing
+    output_path_png = os.path.join(output_dir, 'tracking_error_distribution.png')
+    plt.savefig(output_path_png, format='png', dpi=300, bbox_inches='tight')
+    print(f'Tracking error distribution plot (PNG) saved to: {output_path_png}')
+
+
 def run_monte_carlo_experiment(mode='normal', n_trials=2, base_seed=42, gui=False,
                                run_nmpc=True, run_fmpc=True, run_fmpc_socp=True):
     """Main function to run Monte Carlo experiments.
@@ -724,6 +928,10 @@ def run_monte_carlo_experiment(mode='normal', n_trials=2, base_seed=42, gui=Fals
 
     # Print summary
     print_summary_table(results_dict)
+
+    # Generate plots
+    plot_inference_time_violin(results_dict, output_dir)
+    plot_tracking_error_distribution(results_dict, output_dir, ctrl_freq=50)
 
     print(f'\n{"="*80}')
     print(f'Monte Carlo experiment completed!')
