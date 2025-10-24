@@ -29,7 +29,8 @@ algo_config:
       - 2
       - 2
     slack_weight_stability: 250.0
-    slack_weight_dyn_ext: 250000.0
+    #slack_weight_dyn_ext: 250000.0
+    slack_weight_dyn_ext: 500000.0
     slack_weight_state: 250000.0
     input_bound:
       - 10
@@ -58,9 +59,9 @@ algo_config:
       # NOTE: For Clarabel with CVXPYgen, these settings are BAKED IN at code generation
       # and CANNOT be changed at runtime. To change them, you must set force_regenerate: true
       solver_opts:
-        tol_gap_abs: 1.0e-6
-        tol_gap_rel: 1.0e-6
-        tol_feas: 1.0e-6
+        tol_gap_abs: 1.0e-4
+        tol_gap_rel: 1.0e-4
+        tol_feas: 1.0e-4
         iterative_refinement_enable: true
         max_iter: 200
         verbose: false 
