@@ -19,9 +19,9 @@ algo_config:
     randomize_prior_prop: False
     prior_prop_rand_info: null
   warmstart: True
-  solver: ipopt 
+  solver: qrqp 
   use_full_flat_reference: True
-  use_acados: False
+  use_acados: true 
 
   flat_state_constraint:
     apply_state_bound: True  

@@ -19,10 +19,10 @@ algo_config:
     randomize_prior_prop: False
     prior_prop_rand_info: null
   warmstart: True
-  solver: ipopt
+  solver: qrqp 
   use_full_flat_reference: True
-  use_acados: true
-  use_fast_gp: True  # Use FastGPNumpy for 5-10x speedup in GP inference
+  use_acados: true 
+  use_fast_gp: true  # Use FastGPNumpy for 5-10x speedup in GP inference
 
   socp_config:
     beta_sqrt:
@@ -53,7 +53,7 @@ algo_config:
       solver: 'CLARABEL'
       cache_dir: './generated_socp_code'
       force_regenerate: true
-      verbose: true
+      verbose: false 
       # Solver options - these get compiled into the generated code
       # NOTE: For Clarabel with CVXPYgen, these settings are BAKED IN at code generation
       # and CANNOT be changed at runtime. To change them, you must set force_regenerate: true
@@ -63,7 +63,7 @@ algo_config:
         tol_feas: 1.0e-6
         iterative_refinement_enable: true
         max_iter: 200
-        verbose: true
+        verbose: false 
   
   flat_state_constraint:
     apply_state_bound: True

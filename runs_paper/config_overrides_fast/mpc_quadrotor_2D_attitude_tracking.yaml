@@ -18,3 +18,4 @@ algo_config:
     prior_prop_rand_info: null
   warmstart: True
   solver: ipopt
+  use_acados: true  # Set to True to use ACADOS solver instead of CasADi/ipopt

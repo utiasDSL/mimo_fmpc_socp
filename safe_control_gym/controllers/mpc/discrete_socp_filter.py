@@ -54,20 +54,21 @@ class DiscreteSOCPFilter:
         self.W3_mat = self.P - W3_mat_comp.T @ self.P @ W3_mat_comp
 
         # Opt variables and parameters
-        self.X = cp.Variable(shape=(7,))
-        self.A1 = cp.Parameter(shape=(10, 7))
-        self.A2 = cp.Parameter(shape=(9, 7))
-        self.A3 = cp.Parameter(shape=(3, 7))
-        self.b1 = cp.Parameter(shape=(10,))
-        self.b2 = cp.Parameter(shape=(9,))
+        # IMPORTANT: Name all parameters explicitly for CVXPYgen compatibility
+        self.X = cp.Variable(shape=(7,), name='X')
+        self.A1 = cp.Parameter(shape=(10, 7), name='A1')
+        self.A2 = cp.Parameter(shape=(9, 7), name='A2')
+        self.A3 = cp.Parameter(shape=(3, 7), name='A3')
+        self.b1 = cp.Parameter(shape=(10,), name='b1')
+        self.b2 = cp.Parameter(shape=(9,), name='b2')
         self.b3 = np.zeros((3,))
         self.b3[2] = 1
-        self.c1 = cp.Parameter(shape=(1, 7))
-        self.c2 = cp.Parameter(shape=(1, 7))
+        self.c1 = cp.Parameter(shape=(1, 7), name='c1')
+        self.c2 = cp.Parameter(shape=(1, 7), name='c2')
         self.c3 = np.zeros((1, 7))
         self.c3[0, 6] = 1
-        self.d1 = cp.Parameter()
-        self.d2 = cp.Parameter()
+        self.d1 = cp.Parameter(name='d1')
+        self.d2 = cp.Parameter(name='d2')
         self.d3 = 1
         # put into lists
         As = [self.A1, self.A2, self.A3]
@@ -91,10 +92,10 @@ class DiscreteSOCPFilter:
             self.w_s1 = quantile*np.sqrt(h1.T @ bd1 @ bd1.T @ h1)[0]
             self.w_s2 = quantile*np.sqrt(h2.T @ bd2 @ bd2.T @ h2)[0]
 
-            self.Astate = cp.Parameter(shape=(8, 7))
-            self.bstate = cp.Parameter(shape=(8,))
-            self.cstate = cp.Parameter(shape=(1, 7))
-            self.dstate = cp.Parameter()
+            self.Astate = cp.Parameter(shape=(8, 7), name='Astate')
+            self.bstate = cp.Parameter(shape=(8,), name='bstate')
+            self.cstate = cp.Parameter(shape=(1, 7), name='cstate')
+            self.dstate = cp.Parameter(name='dstate')
             As.append(self.Astate)
             bs.append(self.bstate)
             cs.append(self.cstate)
@@ -129,7 +130,7 @@ class DiscreteSOCPFilter:
             Ad_dyn_ext = dyn_ext_mat['Ad']
             Bd_dyn_ext = dyn_ext_mat['Bd']
             # constraint for dynamic extension
-            self.eta = cp.Parameter(shape=(2,))
+            self.eta = cp.Parameter(shape=(2,), name='eta')
             # selection_mat = np.zeros((1, 2))
             # selection_mat[0, 0] = 1.0
             unnormalize_mat = np.zeros((2,7))
@@ -141,7 +142,7 @@ class DiscreteSOCPFilter:
 
             
         # define cost function
-        self.cost = cp.Parameter(shape=(1, 7))  
+        self.cost = cp.Parameter(shape=(1, 7), name='cost')  
 
         # setup optimization problem
         self.prob = cp.Problem(cp.Minimize(self.cost @ self.X), constraints)
@@ -307,14 +308,15 @@ class DiscreteSOCPFilter:
 
         solver = self.cvxpygen_opts.get('solver', 'CLARABEL')
 
-        # Get solver options - these get compiled into the C code
-        # NOTE: For Clarabel, these are BAKED IN and cannot be changed at runtime
+        # Get solver options for code generation (used as defaults)
+        # NOTE: With modified CVXPYgen, solver options can be changed at runtime
+        # via set_solver_<setting>() functions (passed as kwargs to solver)
         solver_opts = self.cvxpygen_opts.get('solver_opts', None)
 
         # Debug: print solver options being used
         if solver_opts:
-            print(f"CVXPYgen: Compiling with solver options: {solver_opts}")
-            print(f"CVXPYgen: NOTE - These settings are baked in and cannot be changed at runtime")
+            print(f"CVXPYgen: Compiling with default solver options: {solver_opts}")
+            print(f"CVXPYgen: NOTE - Runtime options will be taken from self.solver_options")
 
         try:
             # Generate code from the existing CVXPY problem WITHOUT wrapper
@@ -324,7 +326,7 @@ class DiscreteSOCPFilter:
                 self.prob,
                 code_dir=code_dir,
                 solver=solver,
-                solver_opts=solver_opts,  # Settings compiled into generated code
+                solver_opts=solver_opts,  # Default settings (can be overridden at runtime)
                 wrapper=False  # Don't compile yet - patch first
             )
             print("CVXPYgen finished generating code.")
@@ -496,9 +498,9 @@ class DiscreteSOCPFilter:
             try:
                 # CVXPYgen solver: updated_params=None means "update all parameters"
                 # The solver reads values from self.prob.param_dict automatically
-                # NOTE: Solver settings (tolerances, max_iter, etc.) are baked into the compiled code
-                # and cannot be changed at runtime for Clarabel
-                self.cvxpygen_solver(self.prob, updated_params=None)
+                # NOTE: With modified CVXPYgen, solver settings can be passed as kwargs
+                # and will be applied via set_solver_<setting>() functions at runtime
+                self.cvxpygen_solver(self.prob, updated_params=None, **self.solver_options)
 
                 # Extract solution (CVXPYgen populates self.X.value)
                 solve_time = time() - solve_start
