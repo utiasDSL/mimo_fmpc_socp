@@ -115,8 +115,9 @@ class DiscreteSOCPFilter:
         # Add linear constraints: input constraints
         if input_bound is not None: # TODO remove if, input bound always applied due to stability filter
             A_inp = np.zeros((2, 7))
-            A_inp[0, 0] = 1.0
-            A_inp[1, 1] = 1.0
+            delta_u = -0.05
+            A_inp[0, 0] = 1.0 - delta_u
+            A_inp[1, 1] = 1.0 - delta_u
             constraints = constraints + [A_inp @ self.X <= self.input_bound_normalized]
             constraints = constraints + [-self.input_bound_normalized <= A_inp @ self.X]
 
