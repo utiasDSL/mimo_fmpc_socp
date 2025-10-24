@@ -211,9 +211,12 @@ def run_controller_trials(controller_name, env_func, ctrl_func, initial_states, 
         metrics['n_failed'] = n_failed
         metrics['success_rate'] = n_successful / n_trials if n_trials > 0 else 0
 
+        # Compute inference time std dev
+        metrics['inference_time_std'] = np.std(metrics['avarage_inference_time'])
+
         print(f'{controller_name} completed:')
         print(f'  Average RMSE: {metrics["average_rmse"]:.4f} ± {metrics["rmse_std"]:.4f}')
-        print(f'  Average inference time: {np.mean(metrics["avarage_inference_time"]):.4f}s')
+        print(f'  Average inference time: {np.mean(metrics["avarage_inference_time"]):.4f}s ± {metrics["inference_time_std"]:.4f}s')
         print(f'  Success rate: {metrics["success_rate"]:.2%}')
         print()
     else:
@@ -227,7 +230,8 @@ def run_controller_trials(controller_name, env_func, ctrl_func, initial_states, 
             'average_rmse': 0.0,
             'rmse_std': 0.0,
             'failure_rate': 0.0,
-            'avarage_inference_time': [0.0]
+            'avarage_inference_time': [0.0],
+            'inference_time_std': 0.0
         }
         successful_trajs = {}
         print()
@@ -596,12 +600,15 @@ def print_summary_table(results_dict):
 
     # Inference time
     nmpc_time = np.mean(nmpc_metrics.get('avarage_inference_time', [0]))
+    nmpc_time_std = nmpc_metrics.get('inference_time_std', 0)
     fmpc_time = np.mean(fmpc_metrics.get('avarage_inference_time', [0]))
+    fmpc_time_std = fmpc_metrics.get('inference_time_std', 0)
     fmpc_socp_time = np.mean(fmpc_socp_metrics.get('avarage_inference_time', [0]))
+    fmpc_socp_time_std = fmpc_socp_metrics.get('inference_time_std', 0)
 
-    print(f'{"Avg Inference Time (ms)":<30} | {nmpc_time*1000:>15.2f} | '
-          f'{fmpc_time*1000:>15.2f} | '
-          f'{fmpc_socp_time*1000:>15.2f}')
+    print(f'{"Avg Inference Time (ms)":<30} | {nmpc_time*1000:>7.2f} ± {nmpc_time_std*1000:>5.2f} | '
+          f'{fmpc_time*1000:>7.2f} ± {fmpc_time_std*1000:>5.2f} | '
+          f'{fmpc_socp_time*1000:>7.2f} ± {fmpc_socp_time_std*1000:>5.2f}')
 
     # Constraint violations
     print(f'{"Failure Rate (%)":<30} | {nmpc_metrics.get("failure_rate", 0)*100:>15.2f} | '
@@ -823,6 +830,263 @@ def plot_tracking_error_distribution(results_dict, output_dir='./monte_carlo_res
     print(f'Tracking error distribution plot (PNG) saved to: {output_path_png}')
 
 
+def plot_position_distribution(results_dict, output_dir='./monte_carlo_results/normal',
+                               is_constrained=False, constraint_state=-0.8):
+    """Create 2D position plot showing mean trajectory and ±1 std bands for each controller.
+
+    Args:
+        results_dict (dict): Dictionary containing results for each controller
+        output_dir (str): Directory to save the plot
+        is_constrained (bool): Whether to show constraint boundaries
+        constraint_state (float): X position constraint boundary (if constrained)
+    """
+    import matplotlib.pyplot as plt
+
+    # Define TUM colors
+    tum_blue_3 = '#0073CF'
+    tum_dia_dark_green = '#007C30'
+    tum_dia_dark_orange = '#D64C13'
+    tum_dia_red = '#C4071B'
+
+    fig, ax = plt.subplots(figsize=(10, 7))
+
+    # Process each controller
+    controllers = []
+    if 'nmpc' in results_dict:
+        controllers.append(('nmpc', 'NMPC', tum_blue_3))
+    if 'fmpc' in results_dict and not is_constrained:
+        # Don't show FMPC in constrained case
+        controllers.append(('fmpc', 'FMPC', tum_dia_dark_green))
+    if 'fmpc_socp' in results_dict:
+        controllers.append(('fmpc_socp', 'FMPC+SOCP', tum_dia_dark_orange))
+
+    # First, get reference trajectory from any controller's data
+    ref_plotted = False
+    for ctrl_key, _, _ in controllers:
+        trajs_data = results_dict[ctrl_key]['trajs_data']
+        if 'controller_data' in trajs_data and len(trajs_data['controller_data']) > 0:
+            ctrl_data = trajs_data['controller_data'][0]
+            if 'goal_states' in ctrl_data:
+                state_ref = np.array(ctrl_data['goal_states'])
+                # state_ref has shape (n_episodes, n_timesteps, n_states, 1)
+                # Plot first episode's reference (they should all be the same)
+                ref_x = state_ref[0, :, 0, 0]  # x positions
+                ref_z = state_ref[0, :, 2, 0]  # z positions
+                ax.plot(ref_x, ref_z, linestyle='dashed', color='black',
+                       label='Reference', linewidth=2.5, alpha=0.6)
+                ref_plotted = True
+                break
+
+    # Plot each controller's mean trajectory with std bands
+    for ctrl_key, ctrl_label, ctrl_color in controllers:
+        trajs_data = results_dict[ctrl_key]['trajs_data']
+
+        # Extract x and z positions from all trials
+        all_x_positions = []
+        all_z_positions = []
+        max_len = 0
+
+        for trial_obs in trajs_data['obs']:
+            # obs has shape (n_timesteps, n_states)
+            # State: [x, x_dot, z, z_dot, theta, theta_dot]
+            x_positions = trial_obs[:, 0]  # x positions
+            z_positions = trial_obs[:, 2]  # z positions
+
+            all_x_positions.append(x_positions)
+            all_z_positions.append(z_positions)
+            max_len = max(max_len, len(x_positions))
+
+        # Pad shorter trajectories with NaN and create matrices
+        x_matrix = np.full((len(all_x_positions), max_len), np.nan)
+        z_matrix = np.full((len(all_z_positions), max_len), np.nan)
+
+        for i, (x_pos, z_pos) in enumerate(zip(all_x_positions, all_z_positions)):
+            x_matrix[i, :len(x_pos)] = x_pos
+            z_matrix[i, :len(z_pos)] = z_pos
+
+        # Compute mean and std across trials at each timestep
+        mean_x = np.nanmean(x_matrix, axis=0)
+        std_x = np.nanstd(x_matrix, axis=0)
+        mean_z = np.nanmean(z_matrix, axis=0)
+        std_z = np.nanstd(z_matrix, axis=0)
+
+        # Create upper and lower bounds for the std band
+        upper_x = mean_x + std_x
+        upper_z = mean_z + std_z
+        lower_x = mean_x - std_x
+        lower_z = mean_z - std_z
+
+        # Create polygon for shaded region: upper trajectory forward, lower trajectory backward
+        # Remove NaN values
+        valid_indices = ~(np.isnan(mean_x) | np.isnan(mean_z))
+
+        if np.any(valid_indices):
+            # Create vertices for polygon
+            upper_vertices = np.column_stack([upper_x[valid_indices], upper_z[valid_indices]])
+            lower_vertices = np.column_stack([lower_x[valid_indices], lower_z[valid_indices]])
+
+            # Combine: upper forward + lower backward
+            polygon_vertices = np.vstack([upper_vertices, lower_vertices[::-1]])
+
+            # Plot shaded region
+            ax.fill(polygon_vertices[:, 0], polygon_vertices[:, 1],
+                   color=ctrl_color, alpha=0.2)
+
+            # Plot mean trajectory
+            ax.plot(mean_x[valid_indices], mean_z[valid_indices],
+                   color=ctrl_color, linewidth=2.5, label=ctrl_label, alpha=0.9)
+
+    # Add constraint boundary if in constrained mode
+    if is_constrained:
+        ylim = ax.get_ylim()
+        xlim = ax.get_xlim()
+        # Shade the region x < constraint_state
+        ax.axvspan(xlim[0], constraint_state, color=tum_dia_red, alpha=0.2)
+
+    # Formatting
+    ax.set_xlabel('Position x (m)', fontsize=12)
+    ax.set_ylabel('Position z (m)', fontsize=12)
+    ax.set_title('Position Distribution (Mean ± 1 Std)', fontsize=14, fontweight='bold')
+    ax.legend(fontsize=11, loc='best')
+    ax.grid(alpha=0.3)
+
+    # Set reasonable axis limits
+    ax.set_xlim([-1.1, 1.1])
+    ax.set_ylim([0.4, 1.6])
+
+    plt.tight_layout()
+
+    # Save figure
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, 'position_distribution.pdf')
+    plt.savefig(output_path, format='pdf', bbox_inches='tight')
+    print(f'\nPosition distribution plot saved to: {output_path}')
+
+    # Also save as PNG for quick viewing
+    output_path_png = os.path.join(output_dir, 'position_distribution.png')
+    plt.savefig(output_path_png, format='png', dpi=300, bbox_inches='tight')
+    print(f'Position distribution plot (PNG) saved to: {output_path_png}')
+
+
+def plot_input_distribution(results_dict, output_dir='./monte_carlo_results/normal',
+                           ctrl_freq=50, is_constrained=False, constraint_input=0.435):
+    """Create plot showing input distribution over time for each controller.
+
+    Args:
+        results_dict (dict): Dictionary containing results for each controller
+        output_dir (str): Directory to save the plot
+        ctrl_freq (int): Control frequency in Hz (for time axis)
+        is_constrained (bool): Whether to show constraint boundaries
+        constraint_input (float): Thrust constraint boundary (if constrained)
+    """
+    import matplotlib.pyplot as plt
+
+    # Define TUM colors
+    tum_blue_3 = '#0073CF'
+    tum_dia_dark_green = '#007C30'
+    tum_dia_dark_orange = '#D64C13'
+    tum_dia_red = '#C4071B'
+
+    fig, ax = plt.subplots(2, 1, figsize=(10, 8))
+
+    sample_time = 1.0 / ctrl_freq
+
+    # Process each controller
+    controllers = []
+    if 'nmpc' in results_dict:
+        controllers.append(('nmpc', 'NMPC', tum_blue_3))
+    if 'fmpc' in results_dict and not is_constrained:
+        # Don't show FMPC in constrained case
+        controllers.append(('fmpc', 'FMPC', tum_dia_dark_green))
+    if 'fmpc_socp' in results_dict:
+        controllers.append(('fmpc_socp', 'FMPC+SOCP', tum_dia_dark_orange))
+
+    for ctrl_key, ctrl_label, ctrl_color in controllers:
+        trajs_data = results_dict[ctrl_key]['trajs_data']
+
+        # Extract actions (inputs) from all trials
+        all_thrusts = []
+        all_angles = []
+        max_len = 0
+
+        for trial_action in trajs_data['action']:
+            # action has shape (n_timesteps, 2) where 2 is [thrust, angle]
+            thrusts = trial_action[:, 0]  # Thrust T_c
+            angles = trial_action[:, 1]   # Angle theta_c
+
+            all_thrusts.append(thrusts)
+            all_angles.append(angles)
+            max_len = max(max_len, len(thrusts))
+
+        # Pad shorter trajectories with NaN and create matrices
+        thrust_matrix = np.full((len(all_thrusts), max_len), np.nan)
+        angle_matrix = np.full((len(all_angles), max_len), np.nan)
+
+        for i, (thrust, angle) in enumerate(zip(all_thrusts, all_angles)):
+            thrust_matrix[i, :len(thrust)] = thrust
+            angle_matrix[i, :len(angle)] = angle
+
+        # Compute mean and std across trials at each timestep
+        mean_thrust = np.nanmean(thrust_matrix, axis=0)
+        std_thrust = np.nanstd(thrust_matrix, axis=0)
+        mean_angle = np.nanmean(angle_matrix, axis=0)
+        std_angle = np.nanstd(angle_matrix, axis=0)
+
+        # Create time axis
+        time = np.arange(len(mean_thrust)) * sample_time
+
+        # Plot thrust (top subplot)
+        ax[0].plot(time, mean_thrust, color=ctrl_color, linewidth=2.5,
+                   label=ctrl_label, alpha=0.9)
+        ax[0].fill_between(time,
+                          mean_thrust - std_thrust,
+                          mean_thrust + std_thrust,
+                          color=ctrl_color, alpha=0.2)
+
+        # Plot angle (bottom subplot)
+        ax[1].plot(time, mean_angle, color=ctrl_color, linewidth=2.5,
+                   label=ctrl_label, alpha=0.9)
+        ax[1].fill_between(time,
+                          mean_angle - std_angle,
+                          mean_angle + std_angle,
+                          color=ctrl_color, alpha=0.2)
+
+    # Add constraint boundary if in constrained mode
+    if is_constrained:
+        # Shade the region above constraint_input for thrust
+        ylim_top = ax[0].get_ylim()
+        ax[0].axhspan(constraint_input, ylim_top[1], color=tum_dia_red, alpha=0.2)
+
+        # Shade the regions outside ±1.5 rad for angle
+        ylim_bottom = ax[1].get_ylim()
+        ax[1].axhspan(ylim_bottom[0], -1.5, color=tum_dia_red, alpha=0.2)
+        ax[1].axhspan(1.5, ylim_bottom[1], color=tum_dia_red, alpha=0.2)
+
+    # Formatting for thrust subplot
+    ax[0].set_ylabel(r'Thrust $T_c$ (N)', fontsize=12)
+    ax[0].set_title('Input Distribution Over Time (Mean ± 1 Std)', fontsize=14, fontweight='bold')
+    ax[0].grid(alpha=0.3)
+
+    # Formatting for angle subplot
+    ax[1].set_xlabel('Time (s)', fontsize=12)
+    ax[1].set_ylabel(r'Angle $\theta_c$ (rad)', fontsize=12)
+    ax[1].legend(fontsize=11, loc='upper right')
+    ax[1].grid(alpha=0.3)
+
+    plt.tight_layout()
+
+    # Save figure
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, 'input_distribution.pdf')
+    plt.savefig(output_path, format='pdf', bbox_inches='tight')
+    print(f'\nInput distribution plot saved to: {output_path}')
+
+    # Also save as PNG for quick viewing
+    output_path_png = os.path.join(output_dir, 'input_distribution.png')
+    plt.savefig(output_path_png, format='png', dpi=300, bbox_inches='tight')
+    print(f'Input distribution plot (PNG) saved to: {output_path_png}')
+
+
 def run_monte_carlo_experiment(mode='normal', n_trials=2, base_seed=42, gui=False,
                                run_nmpc=True, run_fmpc=True, run_fmpc_socp=True):
     """Main function to run Monte Carlo experiments.
@@ -932,6 +1196,12 @@ def run_monte_carlo_experiment(mode='normal', n_trials=2, base_seed=42, gui=Fals
     # Generate plots
     plot_inference_time_violin(results_dict, output_dir)
     plot_tracking_error_distribution(results_dict, output_dir, ctrl_freq=50)
+    plot_position_distribution(results_dict, output_dir,
+                              is_constrained=(mode == 'constrained'),
+                              constraint_state=-0.8)
+    plot_input_distribution(results_dict, output_dir, ctrl_freq=50,
+                           is_constrained=(mode == 'constrained'),
+                           constraint_input=0.435)
 
     print(f'\n{"="*80}')
     print(f'Monte Carlo experiment completed!')
