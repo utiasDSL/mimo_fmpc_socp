@@ -60,6 +60,7 @@ class MPC(BaseController):
             init_solver: str = 'ipopt',
             solver: str = 'ipopt',
             use_acados: bool = False,
+            verbose: bool = False,
             **kwargs
     ):
         '''Creates task and controller.
@@ -245,7 +246,8 @@ class MPC(BaseController):
                 sol = opti.solve()
                 x_val, u_val = sol.value(x_var), sol.value(u_var)
             except RuntimeError:
-                print(colored('Warm-starting fails', 'red'))
+                if self.verbose:
+                    print(colored('Warm-starting fails', 'red'))
                 x_val, u_val = opti.debug.value(x_var), opti.debug.value(u_var)
             x_guess = x_val
             u_guess = u_val
@@ -430,16 +432,19 @@ class MPC(BaseController):
             x_val, u_val = sol.value(x_var), sol.value(u_var)
         except RuntimeError:
             mpc_solve_time = time() - mpc_solve_start
-            print(colored('Infeasible MPC Problem', 'red'))
+            if self.verbose:
+                print(colored('Infeasible MPC Problem', 'red'))
             return_status = opti.return_status()
-            print(colored(f'Optimization failed with status: {return_status}', 'red'))
+            if self.verbose:
+                print(colored(f'Optimization failed with status: {return_status}', 'red'))
             if self.solver == 'ipopt':
                 x_val, u_val = opti.debug.value(x_var), opti.debug.value(u_var)
             elif self.solver == 'qrsqp':
                 if return_status == 'unknown':
                     # self.terminate_loop = True
                     if self.u_prev is None:
-                        print(colored('[WARN]: MPC Infeasible first step.', 'yellow'))
+                        if self.verbose:
+                            print(colored('[WARN]: MPC Infeasible first step.', 'yellow'))
                         u_val = np.zeros((self.model.nu, self.T))
                         x_val = np.zeros((self.model.nx, self.T + 1))
                     else:
@@ -488,10 +493,11 @@ class MPC(BaseController):
             end = min(self.traj_step + self.T + 1, self.extended_ref_traj.shape[-1])
             remain = max(0, self.T + 1 - (end - start)) 
             '''
-            TODO: if using the extended reference trajectory, 
+            TODO: if using the extended reference trajectory,
             variable remain will always be 0. Consider removing it.
             '''
-            print('start:', start, 'end:', end, 'remain:', remain)
+            if self.verbose:
+                print('start:', start, 'end:', end, 'remain:', remain)
             goal_states = np.concatenate([
                 self.extended_ref_traj[:, start:end],
                 np.tile(self.extended_ref_traj[:, -1:], (1, remain))

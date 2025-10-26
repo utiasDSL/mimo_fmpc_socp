@@ -383,15 +383,19 @@ class MPC_ACADOS(MPC):
             # get the solver status
             n_sqp_iter = self.acados_ocp_solver.get_stats('sqp_iter')
             n_qp_iter = self.acados_ocp_solver.get_stats('qp_iter')
-            print(f'acados returned status {status}. SQP iterations: {n_sqp_iter}. QP iterations: {n_qp_iter}.')
+            if self.verbose:
+                print(f'acados returned status {status}. SQP iterations: {n_sqp_iter}. QP iterations: {n_qp_iter}.')
 
         except Exception:
             mpc_solve_time = time() - mpc_solve_start
-            print(colored('Infeasible MPC Problem', 'red'))
+            if self.verbose:
+                print(colored('Infeasible MPC Problem', 'red'))
             # get the solver status
-            self.acados_ocp_solver.print_statistics()
+            if self.verbose:
+                self.acados_ocp_solver.print_statistics()
             status = self.acados_ocp_solver.get_stats('status')
-            print(f'acados returned status {status}. ')
+            if self.verbose:
+                print(f'acados returned status {status}. ')
             # OPTIONAL: shift the x_prev and u_prev and copy the last state
             # self.x_prev = np.concatenate((self.x_guess[:, 1:], np.atleast_2d(self.x_guess[:, -1]).T), axis=1)
             # self.u_prev = np.concatenate((self.u_guess[:, 1:], np.atleast_2d(self.u_guess[:, -1]).T), axis=1)

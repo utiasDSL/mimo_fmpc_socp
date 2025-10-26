@@ -57,6 +57,7 @@ class FlatMPC_SOCP(BaseController):
             use_fast_gp=True,
             socp_config = dict,
             flat_state_constraint = dict,
+            verbose=False,
             **kwargs):
         '''Creates task and controller.
 
@@ -253,6 +254,7 @@ class FlatMPC_SOCP(BaseController):
         # Extract CVXPYgen configuration
         cvxpygen_config = socp_config.get('cvxpygen', {})
         use_cvxpygen = cvxpygen_config.get('enabled', False)
+        # Verbose flag is passed as parameter (defaults to False)
 
         # initialize SOCP Filter
         self.filter = DiscreteSOCPFilter(gps, ctrl_mats, np.array(socp_config.input_bound),
@@ -263,7 +265,8 @@ class FlatMPC_SOCP(BaseController):
                                          use_cvxpygen=use_cvxpygen,
                                          cvxpygen_opts=cvxpygen_config,
                                          solver=solver,
-                                         solver_options=solver_options)
+                                         solver_options=solver_options,
+                                         verbose=verbose)
         
         self.socp_opt = np.zeros((5,)) 
 

@@ -20,12 +20,13 @@ except NameError:
         return func
 
 class DiscreteSOCPFilter:
-    def __init__(self, gps, ctrl_mat, input_bound, normalization_vect = np.ones((6,)), slack_weights=[25.0, 250000.0, 25.0], beta_sqrt = [2, 2], state_bound=None, thrust_bound=None, dyn_ext_mat=None, use_cvxpygen=False, cvxpygen_opts=None, solver='CLARABEL', solver_options=None):
+    def __init__(self, gps, ctrl_mat, input_bound, normalization_vect = np.ones((6,)), slack_weights=[25.0, 250000.0, 25.0], beta_sqrt = [2, 2], state_bound=None, thrust_bound=None, dyn_ext_mat=None, use_cvxpygen=False, cvxpygen_opts=None, solver='CLARABEL', solver_options=None, verbose=False):
 
 
         self.gps = gps
         self.d_weights = slack_weights # for slack variable, = 2*sqrt(rho) in formulas, 2 components
         self.beta_sqrt = beta_sqrt # sqrt(beta_i) in formulas
+        self.verbose = verbose  # Control runtime printing
 
         # Solver configuration
         self.solver = solver
@@ -132,6 +133,7 @@ class DiscreteSOCPFilter:
             Bd_dyn_ext = dyn_ext_mat['Bd']
             # constraint for dynamic extension
             self.eta = cp.Parameter(shape=(2,), name='eta')
+            delta_thrust = -0.001
             # selection_mat = np.zeros((1, 2))
             # selection_mat[0, 0] = 1.0
             unnormalize_mat = np.zeros((2,7))
@@ -139,7 +141,7 @@ class DiscreteSOCPFilter:
             unnormalize_mat[1, 1] = self.norm_u[1]
             slacking_vect = np.zeros((1, 7))
             slacking_vect[0, 4] = 1.0
-            constraints = constraints + [(Ad_dyn_ext @ self.eta + Bd_dyn_ext @ unnormalize_mat @ self.X)[0] <= thrust_bound + slacking_vect @ self.X] # better as SOC constraint??
+            constraints = constraints + [(Ad_dyn_ext @ self.eta + Bd_dyn_ext @ unnormalize_mat @ self.X)[0] <= thrust_bound + slacking_vect @ self.X + delta_thrust] # better as SOC constraint??
 
             
         # define cost function
@@ -519,18 +521,22 @@ class DiscreteSOCPFilter:
                         # AlmostSolved - solution found but tolerances not fully met
                         # Accept it with a warning
                         success = True
-                        print(f'SOCP: CVXPYgen/Clarabel status 4 (AlmostSolved) - using solution')
+                        if self.verbose:
+                            print(f'SOCP: CVXPYgen/Clarabel status 4 (AlmostSolved) - using solution')
                     else:
                         success = False
-                        print(f'SOCP: CVXPYgen/Clarabel failed with status: {self.prob.status}')
+                        if self.verbose:
+                            print(f'SOCP: CVXPYgen/Clarabel failed with status: {self.prob.status}')
                 elif self.prob.status in ['optimal', 'optimal_inaccurate']:
                     success = True
                 else:
                     success = False
-                    print(f'SOCP: CVXPYgen/Clarabel status: {self.prob.status}')
+                    if self.verbose:
+                        print(f'SOCP: CVXPYgen/Clarabel status: {self.prob.status}')
 
             except Exception as e:
-                print(f'SOCP: CVXPYgen solver failed: {e}')
+                if self.verbose:
+                    print(f'SOCP: CVXPYgen solver failed: {e}')
                 success = False
                 solve_time = time() - solve_start
         else:
@@ -581,7 +587,8 @@ class DiscreteSOCPFilter:
             return self.X.value[0:2]*self.norm_u, success, self.X.value, logging_dict
 
         else:
-            print('SOCP: Solver failed to find an optimal solution')
+            if self.verbose:
+                print('SOCP: Solver failed to find an optimal solution')
             # Return same 4 values as success case: (action, success, X_value, logging_dict)
             # This applies to both CVXPYgen and MOSEK solvers
             # Include all timing fields to prevent KeyError in calling code

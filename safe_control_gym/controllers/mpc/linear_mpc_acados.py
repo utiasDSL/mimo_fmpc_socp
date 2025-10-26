@@ -416,15 +416,19 @@ class LinearMPC_ACADOS(MPC):
             # get the solver status
             n_sqp_iter = self.acados_ocp_solver.get_stats('sqp_iter')
             n_qp_iter = self.acados_ocp_solver.get_stats('qp_iter')
-            print(f'acados returned status {status}. SQP iterations: {n_sqp_iter}. QP iterations: {n_qp_iter}.')
+            if self.verbose:
+                print(f'acados returned status {status}. SQP iterations: {n_sqp_iter}. QP iterations: {n_qp_iter}.')
 
         except Exception:
             mpc_solve_time = time() - mpc_solve_start
-            print(colored('Infeasible MPC Problem', 'red'))
+            if self.verbose:
+                print(colored('Infeasible MPC Problem', 'red'))
             # get the solver status
-            self.acados_ocp_solver.print_statistics()
+            if self.verbose:
+                self.acados_ocp_solver.print_statistics()
             status = self.acados_ocp_solver.get_stats('status')
-            print(f'acados returned status {status}. ')
+            if self.verbose:
+                print(f'acados returned status {status}. ')
             # OPTIONAL: shift the x_prev and u_prev and copy the last state
             # self.x_prev = np.concatenate((self.x_guess[:, 1:], np.atleast_2d(self.x_guess[:, -1]).T), axis=1)
             # self.u_prev = np.concatenate((self.u_guess[:, 1:], np.atleast_2d(self.u_guess[:, -1]).T), axis=1)
@@ -505,33 +509,34 @@ class LinearMPC_ACADOS(MPC):
         self.results_dict['goal_states'].append(goal_states_copy_2)
         logging_time_2 = time() - logging_start_2
 
-        # Print timing breakdown
-        print(f"\n=== MPC Warm-start Timing Breakdown ===")
-        print(f"Block 1 - Solution extraction:")
-        print(f"  State extraction (41 gets):  {state_extract_time*1000:.3f}ms")
-        print(f"  Input extraction (40 gets):  {input_extract_time*1000:.3f}ms")
-        print(f"  Total extraction 1:          {extract_time_1*1000:.3f}ms")
-        print(f"Block 1 - Logging:")
-        print(f"  deepcopy(x_prev):            {deepcopy_state_time*1000:.3f}ms")
-        print(f"  deepcopy(u_prev):            {deepcopy_input_time*1000:.3f}ms")
-        print(f"  deepcopy(goal_states):       {deepcopy_goal_time*1000:.3f}ms")
-        print(f"  Total logging 1:             {logging_time_1*1000:.3f}ms")
-        print(f"\nBlock 2 - Solution extraction (DUPLICATE):")
-        print(f"  State extraction (41 gets):  {state_extract_time_2*1000:.3f}ms")
-        print(f"  Input extraction (40 gets):  {input_extract_time_2*1000:.3f}ms")
-        print(f"  Total extraction 2:          {extract_time_2*1000:.3f}ms")
-        print(f"Block 2 - Logging (DUPLICATE):")
-        print(f"  deepcopy(x_prev):            {deepcopy_state_time_2*1000:.3f}ms")
-        print(f"  deepcopy(u_prev):            {deepcopy_input_time_2*1000:.3f}ms")
-        print(f"  deepcopy(goal_states):       {deepcopy_goal_time_2*1000:.3f}ms")
-        print(f"  Total logging 2:             {logging_time_2*1000:.3f}ms")
-        print(f"\nOther operations:")
-        print(f"  Action extraction:           {action_extract_time*1000:.3f}ms")
-        print(f"  Guess assignment 1:          {guess_assign_time*1000:.3f}ms")
-        print(f"  Guess assignment 2:          {guess_assign_time_2*1000:.3f}ms")
-        print(f"\nTOTAL OVERHEAD (excl solve): {(extract_time_1 + logging_time_1 + extract_time_2 + logging_time_2 + action_extract_time + guess_assign_time + guess_assign_time_2)*1000:.3f}ms")
-        print(f"DUPLICATE WASTE:             {(extract_time_2 + logging_time_2)*1000:.3f}ms")
-        print(f"======================================\n")
+        # Print timing breakdown (only if verbose)
+        if self.verbose:
+            print(f"\n=== MPC Warm-start Timing Breakdown ===")
+            print(f"Block 1 - Solution extraction:")
+            print(f"  State extraction (41 gets):  {state_extract_time*1000:.3f}ms")
+            print(f"  Input extraction (40 gets):  {input_extract_time*1000:.3f}ms")
+            print(f"  Total extraction 1:          {extract_time_1*1000:.3f}ms")
+            print(f"Block 1 - Logging:")
+            print(f"  deepcopy(x_prev):            {deepcopy_state_time*1000:.3f}ms")
+            print(f"  deepcopy(u_prev):            {deepcopy_input_time*1000:.3f}ms")
+            print(f"  deepcopy(goal_states):       {deepcopy_goal_time*1000:.3f}ms")
+            print(f"  Total logging 1:             {logging_time_1*1000:.3f}ms")
+            print(f"\nBlock 2 - Solution extraction (DUPLICATE):")
+            print(f"  State extraction (41 gets):  {state_extract_time_2*1000:.3f}ms")
+            print(f"  Input extraction (40 gets):  {input_extract_time_2*1000:.3f}ms")
+            print(f"  Total extraction 2:          {extract_time_2*1000:.3f}ms")
+            print(f"Block 2 - Logging (DUPLICATE):")
+            print(f"  deepcopy(x_prev):            {deepcopy_state_time_2*1000:.3f}ms")
+            print(f"  deepcopy(u_prev):            {deepcopy_input_time_2*1000:.3f}ms")
+            print(f"  deepcopy(goal_states):       {deepcopy_goal_time_2*1000:.3f}ms")
+            print(f"  Total logging 2:             {logging_time_2*1000:.3f}ms")
+            print(f"\nOther operations:")
+            print(f"  Action extraction:           {action_extract_time*1000:.3f}ms")
+            print(f"  Guess assignment 1:          {guess_assign_time*1000:.3f}ms")
+            print(f"  Guess assignment 2:          {guess_assign_time_2*1000:.3f}ms")
+            print(f"\nTOTAL OVERHEAD (excl solve): {(extract_time_1 + logging_time_1 + extract_time_2 + logging_time_2 + action_extract_time + guess_assign_time + guess_assign_time_2)*1000:.3f}ms")
+            print(f"DUPLICATE WASTE:             {(extract_time_2 + logging_time_2)*1000:.3f}ms")
+            print(f"======================================\n")
 
         # Store timing data in results_dict for later analysis
         if 'mpc_extract_time_1' not in self.results_dict:
