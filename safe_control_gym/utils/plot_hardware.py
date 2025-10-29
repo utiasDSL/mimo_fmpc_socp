@@ -2,9 +2,15 @@ import os
 import sys
 import json
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
-plt.style.use("ggplot")
-import tikzplotlib
+mpl.use("pgf")
+plt.rcParams.update({
+    "pgf.texsystem": "pdflatex",
+    "font.family": "serif",
+    "text.usetex": True,
+    "pgf.rcfonts": False,
+})
 
 from safe_control_gym.utils.utils import DataVarIndex, Status, load_data 
 
@@ -67,25 +73,31 @@ if __name__ == "__main__":
     # status = Status.HOVER
 
     # Specify the data by setting either the run_name or the file_name
+    PLOT_CONSTRAINED = False 
+
 
     SHADE_STATE_CONSTRAINT = True
     SHADE_INPUT_CONSTRAINT = True
-    SHOW_FMPC = True 
-    SHOW_NMPC = True
+    if PLOT_CONSTRAINED:
+        SHOW_FMPC = False
+        SHOW_NMPC = False
+    else:
+        SHOW_FMPC = True 
+        SHOW_NMPC = True
     # Plot the data
-    plt.rcParams['pdf.fonttype'] = 42
-    plt.rcParams['ps.fonttype'] = 42
+    #plt.rcParams['pdf.fonttype'] = 42
+    #plt.rcParams['ps.fonttype'] = 42
 
     constraint_state = -0.8
     constraint_input = 0.41
 
-    fig_width = 5.8 # inches
-    fig_height = 5.8/1.4
+    fig_width = 7.25/4.1 # inches
+    fig_height = fig_width/1.4
     plt.rcParams.update({
-        'font.size': 10, 
+        'font.size': 4, 
         "text.usetex": True,            # Use LaTeX for text rendering
         "font.family": "serif",         # Match LaTeX font (e.g., Computer Modern)
-        "legend.fontsize": 8,           # Legend size
+        "legend.fontsize": 4,           # Legend size
         # "pgf.texsystem": "pdflatex"
         })
     alpha_lines = 0.6
@@ -95,9 +107,13 @@ if __name__ == "__main__":
     
     nmpc_path = '/home/ahall/Documents/UofT/papers/mimo_fmpc_socp_gp_ecc/mimo_fmpc_socp/runs_paper/hardware_data/Run5_unconstrainedDark2/data_20250421_211431.csv'
     fmpc_path = '/home/ahall/Documents/UofT/papers/mimo_fmpc_socp_gp_ecc/mimo_fmpc_socp/runs_paper/hardware_data/Run5_unconstrainedDark2/data_20250421_211350.csv'
-    socp_path = '/home/ahall/Documents/UofT/papers/mimo_fmpc_socp_gp_ecc/mimo_fmpc_socp/runs_paper/hardware_data/Run5_unconstrainedDark2/data_20250421_211307.csv'
 
-    save_path_1 = '/home/ahall/Documents/UofT/papers/mimo_fmpc_socp_gp_ecc/mimo_fmpc_socp/runs_paper/hardware_data/Run5_unconstrainedDark2/plots/'
+    if PLOT_CONSTRAINED:
+        socp_path = '/home/ahall/Documents/UofT/papers/mimo_fmpc_socp_gp_ecc/mimo_fmpc_socp/runs_paper/hardware_data/eager-galaxy-308/data_20250422_143652.csv'
+        save_path_1 = '/home/ahall/Documents/UofT/papers/mimo_fmpc_socp_gp_ecc/mimo_fmpc_socp/runs_paper/hardware_data/eager-galaxy-308/plots/'
+    else:
+        socp_path = '/home/ahall/Documents/UofT/papers/mimo_fmpc_socp_gp_ecc/mimo_fmpc_socp/runs_paper/hardware_data/Run5_unconstrainedDark2/data_20250421_211307.csv'
+        save_path_1 = '/home/ahall/Documents/UofT/papers/mimo_fmpc_socp_gp_ecc/mimo_fmpc_socp/runs_paper/hardware_data/Run5_unconstrainedDark2/plots/'
 
     pos_x_socp, pos_z_socp, pos_x_des_socp, pos_z_des_socp, theta_socp, theta_cmd_socp, thrust_cmd_socp, pos_error_socp, inference_time_socp, time_socp = plotter.prepare_data_thesis(socp_path, status=status)
     pos_x_fmpc, pos_z_fmpc, pos_x_des_fmpc, pos_z_des_fmpc, theta_fmpc, theta_cmd_fmpc, thrust_cmd_fmpc, pos_error_fmpc, inference_time_fmpc, time_fmpc = plotter.prepare_data_thesis(fmpc_path, status=status)
@@ -136,16 +152,17 @@ if __name__ == "__main__":
     fmpc_socp_color = tum_dia_dark_orange
 
     ref_label = '_nolegend_' #'reference'
-    nmpc_label = 'NMPC (fitted model)'
-    fmpc_label = 'FMPC (fitted model)'
-    fmpc_socp_label = 'FMPC+GP+SOCP'
+    nmpc_label = 'NMPC'
+    fmpc_label = 'FMPC'
+    fmpc_socp_label = 'FMPC+SOCP'
 
-    linewidth = 2.5
+    linewidth = 1.0
 
     limits_x = [-1.1, 1.1]
     limits_y = [0.4, 1.6]
 
     # plot of figure 8 in 2D space
+
     plt.figure(figsize=(fig_width, fig_height))
     plt.plot(pos_x_des_socp, pos_z_des_socp, linestyle = 'dashed', color=ref_color, label=ref_label, linewidth=linewidth, alpha=alpha_lines)
     if SHOW_NMPC:
@@ -153,15 +170,17 @@ if __name__ == "__main__":
     if SHOW_FMPC:
         plt.plot(pos_x_fmpc, pos_z_fmpc, color=fmpc_color, label=fmpc_label, linewidth=linewidth, alpha=alpha_lines)
     plt.plot(pos_x_socp, pos_z_socp, color=fmpc_socp_color, label=fmpc_socp_label, linewidth=linewidth, alpha=alpha_lines)
-    plt.legend()
+    plt.legend(loc='upper center')
     plt.xlabel(r'Position x (m)')
     plt.ylabel(r'Position z (m)')
     plt.xlim(limits_x)
-    # plt.ylim(limits_y)
+    plt.ylim(limits_y)
     plt.grid()
     if SHADE_STATE_CONSTRAINT:
         plt.axvspan(limits_x[0], constraint_state, color=tum_dia_red, alpha=alpha_constraint)
-    plt.savefig(save_path_1 + 'fig8.pdf', format="pdf", bbox_inches=None)
+    plt.savefig(save_path_1 + 'fig8.pgf', format="pgf", bbox_inches='tight',pad_inches=0.0)
+    plt.savefig(save_path_1 + 'fig8.pdf', format="pdf", bbox_inches='tight',pad_inches=0.0)
+
 
     # plot errors over time
     plt.figure(figsize=(fig_width, fig_height))
@@ -174,9 +193,8 @@ if __name__ == "__main__":
     plt.xlabel(r'Time (s)')
     plt.ylabel(r'Tracking error (m)')
     plt.grid()
-    plt.savefig(save_path_1 + 'tracking_error.pdf', format="pdf", bbox_inches=None)
-
-    tikzplotlib.save("test.tex")
+    plt.savefig(save_path_1 + 'tracking_error.pgf', format="pgf", bbox_inches='tight', pad_inches=0.0)
+    plt.savefig(save_path_1 + 'tracking_error.pdf', format="pdf", bbox_inches='tight', pad_inches=0.0)
 
 
     # Inputs
@@ -202,7 +220,9 @@ if __name__ == "__main__":
         ax[0].axhspan(constraint_input, limits_y1[1], color=tum_dia_red, alpha=alpha_constraint)
     ax[1].legend(loc="upper right")
 
-    plt.savefig(save_path_1 + 'inputs.pdf', format="pdf", bbox_inches=None)
+    plt.tight_layout()
+    plt.savefig(save_path_1 + 'inputs.pgf', format="pgf", bbox_inches='tight', pad_inches=0.0)
+    plt.savefig(save_path_1 + 'inputs.pdf', format="pdf", bbox_inches='tight', pad_inches=0.0)
 
     plt.show()
 

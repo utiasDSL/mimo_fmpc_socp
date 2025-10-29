@@ -20,6 +20,8 @@ hpo_study*/
 hp_study*/
 comparisons/
 
+runs_paper/hardware_data/
+
 
 # macOS users
 .DS_Store

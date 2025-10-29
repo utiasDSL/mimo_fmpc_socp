@@ -1,8 +1,8 @@
 task_config:
   seed: 1337
   info_in_reset: True
-  ctrl_freq: 50
-  pyb_freq: 50
+  ctrl_freq: 100
+  pyb_freq: 100
   physics: dyn_si
   quad_type: 4
 

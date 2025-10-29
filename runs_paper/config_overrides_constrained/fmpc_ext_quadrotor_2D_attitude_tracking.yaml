@@ -5,11 +5,11 @@ algo_config:
     - 1.0e-6
     - 1.0e-6
   q_mpc: 
-    - 50 
+    - 10 
     - 0.001
     - 0.1
     - 0.001
-    - 50 
+    - 10 
     - 0.001
     - 0.1
     - 0.001
@@ -19,9 +19,10 @@ algo_config:
     randomize_prior_prop: False
     prior_prop_rand_info: null
   warmstart: True
-  solver: qrqp 
+  solver: ipopt 
   use_full_flat_reference: True
   use_acados: true 
+  verbose: false
 
   flat_state_constraint:
     apply_state_bound: True  

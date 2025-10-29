@@ -15,6 +15,13 @@ import matplotlib.pyplot as plt
 # Set matplotlib PDF font type for better compatibility
 plt.rcParams['pdf.fonttype'] = 42
 plt.rcParams['ps.fonttype'] = 42
+plt.rcParams.update({
+    'font.size': 4, 
+    "text.usetex": True,            # Use LaTeX for text rendering
+    "font.family": "serif",         # Match LaTeX font (e.g., Computer Modern)
+    "legend.fontsize": 4,           # Legend size
+    # "pgf.texsystem": "pdflatex"
+    })
 
 
 def compute_second_half_rmse(trajs_data):
@@ -458,12 +465,12 @@ def plot_inference_time_violin(results_dict, output_dir='./monte_carlo_results/n
     # Save figure
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, 'inference_time_violin.pdf')
-    plt.savefig(output_path, format='pdf', bbox_inches='tight')
+    plt.savefig(output_path, format='pdf', bbox_inches='tight', pad_inches=0.0)
     print(f'\nViolin plot saved to: {output_path}')
 
     # Also save as PNG for quick viewing
     output_path_png = os.path.join(output_dir, 'inference_time_violin.png')
-    plt.savefig(output_path_png, format='png', dpi=300, bbox_inches='tight')
+    plt.savefig(output_path_png, format='png', dpi=300, bbox_inches='tight', pad_inches=0.0)
     print(f'Violin plot (PNG) saved to: {output_path_png}')
 
 
@@ -475,14 +482,28 @@ def plot_tracking_error_distribution(results_dict, output_dir='./monte_carlo_res
         output_dir (str): Directory to save the plot
         ctrl_freq (int): Control frequency in Hz (for time axis)
     """
-    # Define TUM colors
+    # Define TUM colors (matching plot_hardware.py)
     tum_blue_3 = '#0073CF'
     tum_dia_dark_green = '#007C30'
     tum_dia_dark_orange = '#D64C13'
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    # Figure size and settings matching plot_hardware.py
+    fig_width = 7.25/4.1  # inches
+    fig_height = fig_width/1.4
+
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+    # Apply font settings matching plot_hardware.py
+    #plt.rcParams.update({
+    #    'font.size': 4,
+    #    'legend.fontsize': 4,
+    #})
 
     sample_time = 1.0 / ctrl_freq
+
+    # Line settings matching plot_hardware.py
+    alpha_lines = 0.6
+    linewidth = 1.0
 
     # Process each controller
     controllers = []
@@ -525,39 +546,41 @@ def plot_tracking_error_distribution(results_dict, output_dir='./monte_carlo_res
         # Create time axis
         time = np.arange(len(mean_error)) * sample_time
 
-        # Convert to millimeters for better readability
-        mean_error_mm = mean_error * 1000
-        std_error_mm = std_error * 1000
+        # Keep in meters
+        mean_error_m = mean_error
+        std_error_m = std_error
 
-        # Plot mean line
-        ax.plot(time, mean_error_mm, color=ctrl_color, linewidth=2.5,
-                label=ctrl_label, alpha=0.9)
+        # Plot mean line (using hardware plot styling)
+        ax.plot(time, mean_error_m, color=ctrl_color, linewidth=linewidth,
+                label=ctrl_label, alpha=alpha_lines)
 
         # Plot shaded region for ±1 std
         ax.fill_between(time,
-                        mean_error_mm - std_error_mm,
-                        mean_error_mm + std_error_mm,
+                        mean_error_m - std_error_m,
+                        mean_error_m + std_error_m,
                         color=ctrl_color, alpha=0.2)
 
-    # Formatting
-    ax.set_xlabel('Time (s)', fontsize=12)
-    ax.set_ylabel('Tracking Error (mm)', fontsize=12)
-    ax.set_title('Tracking Error Distribution Over Time', fontsize=14, fontweight='bold')
-    ax.legend(fontsize=11, loc='best')
-    ax.grid(alpha=0.3)
-
-    plt.tight_layout()
+    # Formatting (matching plot_hardware.py)
+    ax.set_xlabel(r'Time (s)')
+    ax.set_ylabel(r'Tracking error (m)')
+    ax.legend()
+    ax.grid()
 
     # Save figure
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, 'tracking_error_distribution.pdf')
-    plt.savefig(output_path, format='pdf', bbox_inches='tight')
+    plt.savefig(output_path, format='pdf', bbox_inches='tight', pad_inches=0.0)
     print(f'\nTracking error distribution plot saved to: {output_path}')
 
     # Also save as PNG for quick viewing
     output_path_png = os.path.join(output_dir, 'tracking_error_distribution.png')
-    plt.savefig(output_path_png, format='png', dpi=300, bbox_inches='tight')
+    plt.savefig(output_path_png, format='png', dpi=300, bbox_inches='tight', pad_inches=0.0)
     print(f'Tracking error distribution plot (PNG) saved to: {output_path_png}')
+
+    # Also save as PGF for LaTeX
+    output_path_pgf = os.path.join(output_dir, 'tracking_error_distribution.pgf')
+    plt.savefig(output_path_pgf, format='pgf', bbox_inches='tight', pad_inches=0.0)
+    print(f'Tracking error distribution plot (PGF) saved to: {output_path_pgf}')
 
 
 def plot_position_distribution(results_dict, output_dir='./monte_carlo_results/normal',
@@ -570,13 +593,28 @@ def plot_position_distribution(results_dict, output_dir='./monte_carlo_results/n
         is_constrained (bool): Whether to show constraint boundaries
         constraint_state (float): X position constraint boundary (if constrained)
     """
-    # Define TUM colors
+    # Define TUM colors (matching plot_hardware.py)
     tum_blue_3 = '#0073CF'
     tum_dia_dark_green = '#007C30'
     tum_dia_dark_orange = '#D64C13'
     tum_dia_red = '#C4071B'
 
-    fig, ax = plt.subplots(figsize=(10, 7))
+    # Figure size and settings matching plot_hardware.py
+    fig_width = 7.25/4.1  # inches
+    fig_height = fig_width/1.4
+
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+    # Apply font settings matching plot_hardware.py
+    #plt.rcParams.update({
+    #    'font.size': 4,
+    #    'legend.fontsize': 4,
+    #})
+
+    # Line settings matching plot_hardware.py
+    alpha_lines = 0.6
+    alpha_constraint = 0.2
+    linewidth = 1.0
 
     # Process each controller
     controllers = []
@@ -654,7 +692,7 @@ def plot_position_distribution(results_dict, output_dir='./monte_carlo_results/n
                         continue
 
                     ax.plot(ref_x, ref_z, linestyle='dashed', color='black',
-                           label='Reference', linewidth=2.5, alpha=0.6)
+                           label='_nolegend_', linewidth=linewidth, alpha=alpha_lines)
                     ref_plotted = True
                     break
 
@@ -717,40 +755,42 @@ def plot_position_distribution(results_dict, output_dir='./monte_carlo_results/n
             ax.fill(polygon_vertices[:, 0], polygon_vertices[:, 1],
                    color=ctrl_color, alpha=0.2)
 
-            # Plot mean trajectory
+            # Plot mean trajectory (using hardware plot styling)
             ax.plot(mean_x[valid_indices], mean_z[valid_indices],
-                   color=ctrl_color, linewidth=2.5, label=ctrl_label, alpha=0.9)
+                   color=ctrl_color, linewidth=linewidth, label=ctrl_label, alpha=alpha_lines)
 
     # Add constraint boundary if in constrained mode
     if is_constrained:
         ylim = ax.get_ylim()
         xlim = ax.get_xlim()
         # Shade the region x < constraint_state
-        ax.axvspan(xlim[0], constraint_state, color=tum_dia_red, alpha=0.2)
+        ax.axvspan(xlim[0], constraint_state, color=tum_dia_red, alpha=alpha_constraint)
 
-    # Formatting
-    ax.set_xlabel('Position x (m)', fontsize=12)
-    ax.set_ylabel('Position z (m)', fontsize=12)
-    ax.set_title('Position Distribution (Mean ± 1 Std)', fontsize=14, fontweight='bold')
-    ax.legend(fontsize=11, loc='best')
-    ax.grid(alpha=0.3)
+    # Formatting (matching plot_hardware.py)
+    ax.set_xlabel(r'Position x (m)')
+    ax.set_ylabel(r'Position z (m)')
+    ax.legend()
+    ax.grid()
 
     # Set reasonable axis limits
     ax.set_xlim([-1.1, 1.1])
     ax.set_ylim([0.4, 1.6])
 
-    plt.tight_layout()
-
     # Save figure
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, 'position_distribution.pdf')
-    plt.savefig(output_path, format='pdf', bbox_inches='tight')
+    plt.savefig(output_path, format='pdf', bbox_inches='tight', pad_inches=0.0)
     print(f'\nPosition distribution plot saved to: {output_path}')
 
     # Also save as PNG for quick viewing
     output_path_png = os.path.join(output_dir, 'position_distribution.png')
-    plt.savefig(output_path_png, format='png', dpi=300, bbox_inches='tight')
+    plt.savefig(output_path_png, format='png', dpi=300, bbox_inches='tight', pad_inches=0.0)
     print(f'Position distribution plot (PNG) saved to: {output_path_png}')
+
+    # Also save as PGF for LaTeX
+    output_path_pgf = os.path.join(output_dir, 'position_distribution.pgf')
+    plt.savefig(output_path_pgf, format='pgf', bbox_inches='tight', pad_inches=0.0)
+    print(f'Position distribution plot (PGF) saved to: {output_path_pgf}')
 
 
 def plot_input_distribution(results_dict, output_dir='./monte_carlo_results/normal',
@@ -764,13 +804,25 @@ def plot_input_distribution(results_dict, output_dir='./monte_carlo_results/norm
         is_constrained (bool): Whether to show constraint boundaries
         constraint_input (float): Thrust constraint boundary (if constrained)
     """
-    # Define TUM colors
+    # Define TUM colors (matching plot_hardware.py)
     tum_blue_3 = '#0073CF'
     tum_dia_dark_green = '#007C30'
     tum_dia_dark_orange = '#D64C13'
     tum_dia_red = '#C4071B'
 
-    fig, ax = plt.subplots(2, 1, figsize=(10, 8))
+    # Figure size: 3 inches width (as requested)
+    fig_width = 3.0  # inches
+    fig_height = fig_width/1.6
+
+    fig, ax = plt.subplots(2, 1, figsize=(fig_width, fig_height))
+
+    # Note: Font settings are already set globally at the top of this module
+    # No need to override them here
+
+    # Line settings matching plot_hardware.py
+    alpha_lines = 0.6
+    alpha_constraint = 0.2
+    linewidth = 1.0
 
     sample_time = 1.0 / ctrl_freq
 
@@ -818,17 +870,17 @@ def plot_input_distribution(results_dict, output_dir='./monte_carlo_results/norm
         # Create time axis
         time = np.arange(len(mean_thrust)) * sample_time
 
-        # Plot thrust (top subplot)
-        ax[0].plot(time, mean_thrust, color=ctrl_color, linewidth=2.5,
-                   label=ctrl_label, alpha=0.9)
+        # Plot thrust (top subplot) - using hardware plot styling
+        ax[0].plot(time, mean_thrust, color=ctrl_color, linewidth=linewidth,
+                   label=ctrl_label, alpha=alpha_lines)
         ax[0].fill_between(time,
                           mean_thrust - std_thrust,
                           mean_thrust + std_thrust,
                           color=ctrl_color, alpha=0.2)
 
-        # Plot angle (bottom subplot)
-        ax[1].plot(time, mean_angle, color=ctrl_color, linewidth=2.5,
-                   label=ctrl_label, alpha=0.9)
+        # Plot angle (bottom subplot) - using hardware plot styling
+        ax[1].plot(time, mean_angle, color=ctrl_color, linewidth=linewidth,
+                   label=ctrl_label, alpha=alpha_lines)
         ax[1].fill_between(time,
                           mean_angle - std_angle,
                           mean_angle + std_angle,
@@ -838,25 +890,21 @@ def plot_input_distribution(results_dict, output_dir='./monte_carlo_results/norm
     if is_constrained:
         # Shade the region above constraint_input for thrust
         ylim_top = ax[0].get_ylim()
-        ax[0].axhspan(constraint_input, ylim_top[1], color=tum_dia_red, alpha=0.2)
+        ax[0].axhspan(constraint_input, ylim_top[1], color=tum_dia_red, alpha=alpha_constraint)
 
         # Shade the regions outside ±1.5 rad for angle
         ylim_bottom = ax[1].get_ylim()
-        ax[1].axhspan(ylim_bottom[0], -1.5, color=tum_dia_red, alpha=0.2)
-        ax[1].axhspan(1.5, ylim_bottom[1], color=tum_dia_red, alpha=0.2)
+        ax[1].axhspan(ylim_bottom[0], -1.5, color=tum_dia_red, alpha=alpha_constraint)
+        ax[1].axhspan(1.5, ylim_bottom[1], color=tum_dia_red, alpha=alpha_constraint)
 
-    # Formatting for thrust subplot
-    ax[0].set_ylabel(r'Thrust $T_c$ (N)', fontsize=12)
-    ax[0].set_title('Input Distribution Over Time (Mean ± 1 Std)', fontsize=14, fontweight='bold')
-    ax[0].grid(alpha=0.3)
+    # Formatting (matching plot_hardware.py)
+    ax[0].set_ylabel(r'Thrust $T_c$ (N)')
+    ax[0].grid()
 
-    # Formatting for angle subplot
-    ax[1].set_xlabel('Time (s)', fontsize=12)
-    ax[1].set_ylabel(r'Angle $\theta_c$ (rad)', fontsize=12)
-    ax[1].legend(fontsize=11, loc='upper right')
-    ax[1].grid(alpha=0.3)
-
-    plt.tight_layout()
+    ax[1].set_xlabel(r'Time (s)')
+    ax[1].set_ylabel(r'Angle $\theta_c$ (rad)')
+    ax[1].legend(loc='upper right')
+    ax[1].grid()
 
     # Save figure
     os.makedirs(output_dir, exist_ok=True)
@@ -868,3 +916,8 @@ def plot_input_distribution(results_dict, output_dir='./monte_carlo_results/norm
     output_path_png = os.path.join(output_dir, 'input_distribution.png')
     plt.savefig(output_path_png, format='png', dpi=300, bbox_inches='tight')
     print(f'Input distribution plot (PNG) saved to: {output_path_png}')
+
+    # Also save as PGF for LaTeX
+    output_path_pgf = os.path.join(output_dir, 'input_distribution.pgf')
+    plt.savefig(output_path_pgf, format='pgf', bbox_inches='tight')
+    print(f'Input distribution plot (PGF) saved to: {output_path_pgf}')
