@@ -22,6 +22,7 @@ class BaseExperiment:
                  train_env=None,
                  safety_filter=None,
                  verbose: bool = False,
+                 initial_ctrl_reset: bool = True,
                  ):
         '''Creates a generic experiment class to run evaluations and collect standard metrics.
 
@@ -46,9 +47,9 @@ class BaseExperiment:
             self.train_env = RecordDataWrapper(self.train_env)
         self.safety_filter = safety_filter
 
-        self.reset()
+        self.reset(ctrl_reset=initial_ctrl_reset)
 
-    def run_evaluation(self, training=False, n_episodes=None, n_steps=None, done_on_max_steps=None, log_freq=None, verbose=True, **kwargs):
+    def run_evaluation(self, training=False, n_episodes=None, n_steps=None, done_on_max_steps=None, log_freq=None, verbose=True, initial_reset=True,**kwargs):
         '''Evaluate a trained controller.
 
         Args:
@@ -62,7 +63,7 @@ class BaseExperiment:
             metrics (dict): The metrics calculated from the raw data.
         '''
 
-        if not training:
+        if not training and initial_reset:
             self.reset()
         trajs_data = self._execute_evaluations(log_freq=log_freq, n_episodes=n_episodes, n_steps=n_steps, done_on_max_steps=done_on_max_steps, **kwargs)
         metrics = self.compute_metrics(trajs_data)
@@ -127,7 +128,8 @@ class BaseExperiment:
                         if trajs < n_episodes and seeds is not None:
                             seed = seeds[trajs]
                         self.env.save_data()
-                        obs, info = self._evaluation_reset(ctrl_data=ctrl_data, sf_data=sf_data)
+                        if trajs < n_episodes:
+                            obs, info = self._evaluation_reset(ctrl_data=ctrl_data, sf_data=sf_data)
                         break
         elif n_steps is not None:
             while steps < n_steps:
@@ -205,7 +207,7 @@ class BaseExperiment:
         if sf_data is not None and self.safety_filter is not None:
             for data_key, data_val in self.safety_filter.results_dict.items():
                 sf_data[data_key].append(np.array(deepcopy(data_val)))
-        self.ctrl.reset()
+        #self.ctrl.reset()
         self.ctrl.reset_before_run(obs, info, env=self.env)
         if self.safety_filter is not None:
             self.safety_filter.reset_before_run(env=self.env)
@@ -247,12 +249,13 @@ class BaseExperiment:
 
         return metrics
 
-    def reset(self):
+    def reset(self, ctrl_reset=True):
         '''Resets the environments, controller, and safety filter to prepare for training or evaluation.'''
 
         self.env.reset()
         self.env.clear_data()
-        self.ctrl.reset()
+        if ctrl_reset:
+            self.ctrl.reset()
 
         if self.safety_filter is not None:
             self.safety_filter.reset()

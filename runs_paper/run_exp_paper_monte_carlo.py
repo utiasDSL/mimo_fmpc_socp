@@ -281,12 +281,16 @@ def run_controller_trials(controller_name, env_func, ctrl_func, initial_states, 
             # Create controller
             ctrl = ctrl_func()
 
-            # Create experiment
-            experiment = BaseExperiment(env=env, ctrl=ctrl, train_env=train_env)
-            experiment.launch_training()
+            # Load pre-trained GP models for GPMPC if available
+            if hasattr(ctrl, 'load') and hasattr(ctrl, 'gp_model_path') and ctrl.gp_model_path:
+                print(f'    Loading pre-trained GP models from {ctrl.gp_model_path}')
+                ctrl.load(ctrl.gp_model_path, do_reset=False)
+                experiment = BaseExperiment(env=env, ctrl=ctrl, train_env=train_env, initial_ctrl_reset=False)
+            else:
+                experiment = BaseExperiment(env=env, ctrl=ctrl, train_env=train_env, initial_ctrl_reset=True)
 
             # Run evaluation for this trial (1 episode)
-            trajs_data, _ = experiment.run_evaluation(training=True, n_episodes=1, verbose=False)
+            trajs_data, _ = experiment.run_evaluation(training=False, n_episodes=1, verbose=False, initial_reset=False)
 
             # Check if episode completed full duration (detect early termination)
             actual_steps = len(trajs_data['obs'][0]) if len(trajs_data['obs']) > 0 else 0
@@ -479,7 +483,7 @@ def save_results(output_dir, initial_states, seeds, results_dict):
 # and plot regeneration.
 
 def run_monte_carlo_experiment(mode='normal', n_trials=2, base_seed=42, gui=False,
-                               run_nmpc=True, run_fmpc=True, run_fmpc_socp=True):
+                               run_nmpc=True, run_fmpc=True, run_fmpc_socp=True, run_gpmpc=True):
     """Main function to run Monte Carlo experiments.
 
     Args:
@@ -490,6 +494,7 @@ def run_monte_carlo_experiment(mode='normal', n_trials=2, base_seed=42, gui=Fals
         run_nmpc (bool): Whether to run NMPC controller
         run_fmpc (bool): Whether to run FMPC controller
         run_fmpc_socp (bool): Whether to run FMPC+SOCP controller
+        run_gpmpc (bool): Whether to run GPMPC controller
     """
     print('\n' + '='*80)
     print(f'Monte Carlo Experiment: {mode.upper()} mode, {n_trials} trials')
@@ -502,18 +507,20 @@ def run_monte_carlo_experiment(mode='normal', n_trials=2, base_seed=42, gui=Fals
         yaml_file_nmpc = './config_overrides_fast/mpc_quadrotor_2D_attitude_tracking.yaml'
         yaml_file_fmpc = './config_overrides_fast/fmpc_ext_quadrotor_2D_attitude_tracking.yaml'
         yaml_file_fmpc_socp = './config_overrides_fast/fmpc_socp_quadrotor_2D_attitude_tracking.yaml'
+        yaml_file_gpmpc = './config_overrides_fast/gpmpc_acados_TP_quadrotor_2D_attitude_tracking.yaml'
     elif mode == 'constrained':
         yaml_file_base = './config_overrides_constrained/quadrotor_2D_attitude_tracking.yaml'
         yaml_file_base_random = './config_overrides_constrained_random/quadrotor_2D_attitude_tracking.yaml'
         yaml_file_nmpc = './config_overrides_constrained/mpc_quadrotor_2D_attitude_tracking.yaml'
         yaml_file_fmpc = './config_overrides_constrained/fmpc_ext_quadrotor_2D_attitude_tracking.yaml'
         yaml_file_fmpc_socp = './config_overrides_constrained/fmpc_socp_quadrotor_2D_attitude_tracking.yaml'
+        yaml_file_gpmpc = './config_overrides_constrained/gpmpc_acados_TP_quadrotor_2D_attitude_tracking.yaml'
     else:
         raise ValueError(f'Unknown mode: {mode}')
 
     # Collect all config files
     config_files = [yaml_file_base, yaml_file_base_random, yaml_file_nmpc,
-                    yaml_file_fmpc, yaml_file_fmpc_socp]
+                    yaml_file_fmpc, yaml_file_fmpc_socp, yaml_file_gpmpc]
 
     # Verify config files exist
     for yaml_file in config_files:
@@ -533,18 +540,18 @@ def run_monte_carlo_experiment(mode='normal', n_trials=2, base_seed=42, gui=Fals
     try:
         # Main experiment execution wrapped in try-finally for cleanup
         run_monte_carlo_experiment_impl(mode, n_trials, base_seed, gui, run_nmpc, run_fmpc,
-                                        run_fmpc_socp, output_dir, yaml_file_base,
+                                        run_fmpc_socp, run_gpmpc, output_dir, yaml_file_base,
                                         yaml_file_base_random, yaml_file_nmpc, yaml_file_fmpc,
-                                        yaml_file_fmpc_socp)
+                                        yaml_file_fmpc_socp, yaml_file_gpmpc)
     finally:
         # Always restore logging even if experiment fails
         cleanup_logging(stdout_logger, stderr_logger, original_stdout, original_stderr)
 
 
 def run_monte_carlo_experiment_impl(mode, n_trials, base_seed, gui, run_nmpc, run_fmpc,
-                                     run_fmpc_socp, output_dir, yaml_file_base,
+                                     run_fmpc_socp, run_gpmpc, output_dir, yaml_file_base,
                                      yaml_file_base_random, yaml_file_nmpc, yaml_file_fmpc,
-                                     yaml_file_fmpc_socp):
+                                     yaml_file_fmpc_socp, yaml_file_gpmpc):
     """Implementation of Monte Carlo experiment (separated for logging wrapper).
 
     This function contains the actual experiment logic and is called by
@@ -610,6 +617,20 @@ def run_monte_carlo_experiment_impl(mode, n_trials, base_seed, gui, run_nmpc, ru
         trajs, metrics, failed_runs = run_controller_trials('FMPC+SOCP', env_func, ctrl_func, initial_states, gui)
         results_dict['fmpc_socp'] = {'trajs_data': trajs, 'metrics': metrics, 'failed_runs': failed_runs}
 
+    # Run GPMPC
+    if run_gpmpc:
+        sys.argv[1:] = ['--algo', 'gpmpc_acados_TP',
+                        '--task', 'quadrotor',
+                        '--overrides', yaml_file_base, yaml_file_gpmpc]
+        CONFIG_FACTORY = ConfigFactory()
+        config = CONFIG_FACTORY.merge()
+
+        env_func = partial(make, config.task, **config.task_config)
+        ctrl_func = partial(make, config.algo, env_func, **config.algo_config)
+
+        trajs, metrics, failed_runs = run_controller_trials('GPMPC', env_func, ctrl_func, initial_states, gui)
+        results_dict['gpmpc'] = {'trajs_data': trajs, 'metrics': metrics, 'failed_runs': failed_runs}
+
     # Save results
     save_results(output_dir, initial_states, seeds, results_dict)
 
@@ -664,8 +685,8 @@ if __name__ == '__main__':
         '--controllers',
         type=str,
         nargs='+',
-        default=['nmpc', 'fmpc', 'fmpc_socp'],
-        choices=['nmpc', 'fmpc', 'fmpc_socp'],
+        default=['nmpc', 'fmpc', 'fmpc_socp', 'gpmpc'],
+        choices=['nmpc', 'fmpc', 'fmpc_socp', 'gpmpc'],
         help='Which controllers to run (default: all)'
     )
 
@@ -675,6 +696,7 @@ if __name__ == '__main__':
     run_nmpc = 'nmpc' in args.controllers
     run_fmpc = 'fmpc' in args.controllers
     run_fmpc_socp = 'fmpc_socp' in args.controllers
+    run_gpmpc = 'gpmpc' in args.controllers
 
     # Run the experiment
     run_monte_carlo_experiment(
@@ -684,5 +706,6 @@ if __name__ == '__main__':
         gui=args.gui,
         run_nmpc=run_nmpc,
         run_fmpc=run_fmpc,
-        run_fmpc_socp=run_fmpc_socp
+        run_fmpc_socp=run_fmpc_socp,
+        run_gpmpc=run_gpmpc
     )

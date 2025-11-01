@@ -1,6 +1,6 @@
 algo: fmpc_ext
 algo_config:
-  horizon: 40
+  horizon: 70
   r_mpc:
     - 1.0e-6
     - 1.0e-6

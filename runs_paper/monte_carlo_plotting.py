@@ -88,26 +88,29 @@ def extract_timing_statistics(trajs_data, controller_name):
     if 'controller_data' not in trajs_data or len(trajs_data['controller_data']) == 0:
         return timing_stats
 
-    ctrl_data = trajs_data['controller_data'][0]
-
+    # Iterate over ALL trials, not just the first one
     # MPC solve time (available for all controllers)
-    if 'mpc_solve_time' in ctrl_data:
+    if 'mpc_solve_time' in trajs_data['controller_data'][0]:
         all_mpc_times = []
-        for episode_data in ctrl_data['mpc_solve_time']:
-            all_mpc_times.extend(episode_data)
+        for trial_ctrl_data in trajs_data['controller_data']:
+            if 'mpc_solve_time' in trial_ctrl_data:
+                for episode_data in trial_ctrl_data['mpc_solve_time']:
+                    all_mpc_times.extend(episode_data)
         if len(all_mpc_times) > 0:
             timing_stats['mpc_solve'] = {
                 'mean': np.mean(all_mpc_times) * 1000,  # Convert to ms
                 'std': np.std(all_mpc_times) * 1000
             }
 
-    # FMPC_SOCP specific timings
-    if controller_name.lower() == 'fmpc_socp' or controller_name.lower() == 'fmpc+socp':
+    # FMPC_SOCP and GPMPC specific timings
+    if controller_name.lower() in ['fmpc_socp', 'fmpc+socp', 'gpmpc']:
         # SOCP solve time
-        if 'socp_solve_time' in ctrl_data:
+        if 'socp_solve_time' in trajs_data['controller_data'][0]:
             all_socp_times = []
-            for episode_data in ctrl_data['socp_solve_time']:
-                all_socp_times.extend(episode_data)
+            for trial_ctrl_data in trajs_data['controller_data']:
+                if 'socp_solve_time' in trial_ctrl_data:
+                    for episode_data in trial_ctrl_data['socp_solve_time']:
+                        all_socp_times.extend(episode_data)
             if len(all_socp_times) > 0:
                 timing_stats['socp_solve'] = {
                     'mean': np.mean(all_socp_times) * 1000,
@@ -115,15 +118,17 @@ def extract_timing_statistics(trajs_data, controller_name):
                 }
 
         # GP inference time (list of 2 values per timestep)
-        if 'gp_time' in ctrl_data:
+        if 'gp_time' in trajs_data['controller_data'][0]:
             all_gp_times = []
-            for episode_data in ctrl_data['gp_time']:
-                for timestep_gp_times in episode_data:
-                    # Sum the two GP times per timestep
-                    if isinstance(timestep_gp_times, (list, np.ndarray)):
-                        all_gp_times.append(sum(timestep_gp_times))
-                    else:
-                        all_gp_times.append(timestep_gp_times)
+            for trial_ctrl_data in trajs_data['controller_data']:
+                if 'gp_time' in trial_ctrl_data:
+                    for episode_data in trial_ctrl_data['gp_time']:
+                        for timestep_gp_times in episode_data:
+                            # Sum the two GP times per timestep
+                            if isinstance(timestep_gp_times, (list, np.ndarray)):
+                                all_gp_times.append(sum(timestep_gp_times))
+                            else:
+                                all_gp_times.append(timestep_gp_times)
             if len(all_gp_times) > 0:
                 timing_stats['gp_inference'] = {
                     'mean': np.mean(all_gp_times) * 1000,
@@ -131,10 +136,12 @@ def extract_timing_statistics(trajs_data, controller_name):
                 }
 
         # Observer time
-        if 'observer_time' in ctrl_data:
+        if 'observer_time' in trajs_data['controller_data'][0]:
             all_observer_times = []
-            for episode_data in ctrl_data['observer_time']:
-                all_observer_times.extend(episode_data)
+            for trial_ctrl_data in trajs_data['controller_data']:
+                if 'observer_time' in trial_ctrl_data:
+                    for episode_data in trial_ctrl_data['observer_time']:
+                        all_observer_times.extend(episode_data)
             if len(all_observer_times) > 0:
                 timing_stats['observer'] = {
                     'mean': np.mean(all_observer_times) * 1000,
@@ -142,10 +149,12 @@ def extract_timing_statistics(trajs_data, controller_name):
                 }
 
         # Flat transformation time
-        if 'flat_transform_time' in ctrl_data:
+        if 'flat_transform_time' in trajs_data['controller_data'][0]:
             all_transform_times = []
-            for episode_data in ctrl_data['flat_transform_time']:
-                all_transform_times.extend(episode_data)
+            for trial_ctrl_data in trajs_data['controller_data']:
+                if 'flat_transform_time' in trial_ctrl_data:
+                    for episode_data in trial_ctrl_data['flat_transform_time']:
+                        all_transform_times.extend(episode_data)
             if len(all_transform_times) > 0:
                 timing_stats['flat_transform'] = {
                     'mean': np.mean(all_transform_times) * 1000,
@@ -153,10 +162,12 @@ def extract_timing_statistics(trajs_data, controller_name):
                 }
 
         # Dynamic extension time
-        if 'dyn_ext_time' in ctrl_data:
+        if 'dyn_ext_time' in trajs_data['controller_data'][0]:
             all_dyn_ext_times = []
-            for episode_data in ctrl_data['dyn_ext_time']:
-                all_dyn_ext_times.extend(episode_data)
+            for trial_ctrl_data in trajs_data['controller_data']:
+                if 'dyn_ext_time' in trial_ctrl_data:
+                    for episode_data in trial_ctrl_data['dyn_ext_time']:
+                        all_dyn_ext_times.extend(episode_data)
             if len(all_dyn_ext_times) > 0:
                 timing_stats['dyn_extension'] = {
                     'mean': np.mean(all_dyn_ext_times) * 1000,
@@ -180,6 +191,7 @@ def print_timing_breakdown_table(results_dict):
     nmpc_timing = {}
     fmpc_timing = {}
     fmpc_socp_timing = {}
+    gpmpc_timing = {}
 
     if 'nmpc' in results_dict:
         nmpc_timing = extract_timing_statistics(
@@ -196,50 +208,74 @@ def print_timing_breakdown_table(results_dict):
             results_dict['fmpc_socp']['trajs_data'], 'fmpc_socp'
         )
 
+    if 'gpmpc' in results_dict:
+        gpmpc_timing = extract_timing_statistics(
+            results_dict['gpmpc']['trajs_data'], 'gpmpc'
+        )
+
     # Print table
-    print(f'\n{"Component":<25} | {"NMPC":>20} | {"FMPC":>20} | {"FMPC+SOCP":>20}')
-    print('-'*90)
+    print(f'\n{"Component":<25} | {"NMPC":>20} | {"FMPC":>20} | {"FMPC+SOCP":>20} | {"GPMPC":>20}')
+    print('-'*115)
 
     # MPC solve time
     nmpc_mpc = nmpc_timing.get('mpc_solve', {'mean': 0, 'std': 0})
     fmpc_mpc = fmpc_timing.get('mpc_solve', {'mean': 0, 'std': 0})
     fmpc_socp_mpc = fmpc_socp_timing.get('mpc_solve', {'mean': 0, 'std': 0})
+    gpmpc_mpc = gpmpc_timing.get('mpc_solve', {'mean': 0, 'std': 0})
 
     print(f'{"MPC Solve":<25} | {nmpc_mpc["mean"]:>8.3f} ± {nmpc_mpc["std"]:>7.3f} | '
           f'{fmpc_mpc["mean"]:>8.3f} ± {fmpc_mpc["std"]:>7.3f} | '
-          f'{fmpc_socp_mpc["mean"]:>8.3f} ± {fmpc_socp_mpc["std"]:>7.3f}')
+          f'{fmpc_socp_mpc["mean"]:>8.3f} ± {fmpc_socp_mpc["std"]:>7.3f} | '
+          f'{gpmpc_mpc["mean"]:>8.3f} ± {gpmpc_mpc["std"]:>7.3f}')
 
     # SOCP solve time (only for FMPC+SOCP)
     if 'socp_solve' in fmpc_socp_timing:
         socp = fmpc_socp_timing['socp_solve']
         print(f'{"SOCP Solve":<25} | {"—":>20} | {"—":>20} | '
-              f'{socp["mean"]:>8.3f} ± {socp["std"]:>7.3f}')
+              f'{socp["mean"]:>8.3f} ± {socp["std"]:>7.3f} | '
+              f'{"—":>20}')
 
-    # GP inference time (only for FMPC+SOCP)
-    if 'gp_inference' in fmpc_socp_timing:
-        gp = fmpc_socp_timing['gp_inference']
+    # GP inference time (for FMPC+SOCP and GPMPC)
+    if 'gp_inference' in fmpc_socp_timing or 'gp_inference' in gpmpc_timing:
+        fmpc_socp_gp = fmpc_socp_timing.get('gp_inference', {'mean': 0, 'std': 0})
+        gpmpc_gp = gpmpc_timing.get('gp_inference', {'mean': 0, 'std': 0})
+        gp_str_socp = f'{fmpc_socp_gp["mean"]:>8.3f} ± {fmpc_socp_gp["std"]:>7.3f}' if 'gp_inference' in fmpc_socp_timing else "—"
+        gp_str_gpmpc = f'{gpmpc_gp["mean"]:>8.3f} ± {gpmpc_gp["std"]:>7.3f}' if 'gp_inference' in gpmpc_timing else "—"
         print(f'{"GP Inference":<25} | {"—":>20} | {"—":>20} | '
-              f'{gp["mean"]:>8.3f} ± {gp["std"]:>7.3f}')
+              f'{gp_str_socp:>20} | '
+              f'{gp_str_gpmpc:>20}')
 
-    # Observer time (only for FMPC+SOCP)
-    if 'observer' in fmpc_socp_timing:
-        obs = fmpc_socp_timing['observer']
+    # Observer time (for FMPC+SOCP and GPMPC)
+    if 'observer' in fmpc_socp_timing or 'observer' in gpmpc_timing:
+        fmpc_socp_obs = fmpc_socp_timing.get('observer', {'mean': 0, 'std': 0})
+        gpmpc_obs = gpmpc_timing.get('observer', {'mean': 0, 'std': 0})
+        obs_str_socp = f'{fmpc_socp_obs["mean"]:>8.3f} ± {fmpc_socp_obs["std"]:>7.3f}' if 'observer' in fmpc_socp_timing else "—"
+        obs_str_gpmpc = f'{gpmpc_obs["mean"]:>8.3f} ± {gpmpc_obs["std"]:>7.3f}' if 'observer' in gpmpc_timing else "—"
         print(f'{"Flat State Observer":<25} | {"—":>20} | {"—":>20} | '
-              f'{obs["mean"]:>8.3f} ± {obs["std"]:>7.3f}')
+              f'{obs_str_socp:>20} | '
+              f'{obs_str_gpmpc:>20}')
 
-    # Flat transformation time (only for FMPC+SOCP)
-    if 'flat_transform' in fmpc_socp_timing:
-        ft = fmpc_socp_timing['flat_transform']
+    # Flat transformation time (for FMPC+SOCP and GPMPC)
+    if 'flat_transform' in fmpc_socp_timing or 'flat_transform' in gpmpc_timing:
+        fmpc_socp_ft = fmpc_socp_timing.get('flat_transform', {'mean': 0, 'std': 0})
+        gpmpc_ft = gpmpc_timing.get('flat_transform', {'mean': 0, 'std': 0})
+        ft_str_socp = f'{fmpc_socp_ft["mean"]:>8.3f} ± {fmpc_socp_ft["std"]:>7.3f}' if 'flat_transform' in fmpc_socp_timing else "—"
+        ft_str_gpmpc = f'{gpmpc_ft["mean"]:>8.3f} ± {gpmpc_ft["std"]:>7.3f}' if 'flat_transform' in gpmpc_timing else "—"
         print(f'{"Flat Transformation":<25} | {"—":>20} | {"—":>20} | '
-              f'{ft["mean"]:>8.3f} ± {ft["std"]:>7.3f}')
+              f'{ft_str_socp:>20} | '
+              f'{ft_str_gpmpc:>20}')
 
-    # Dynamic extension time (only for FMPC+SOCP)
-    if 'dyn_extension' in fmpc_socp_timing:
-        de = fmpc_socp_timing['dyn_extension']
+    # Dynamic extension time (for FMPC+SOCP and GPMPC)
+    if 'dyn_extension' in fmpc_socp_timing or 'dyn_extension' in gpmpc_timing:
+        fmpc_socp_de = fmpc_socp_timing.get('dyn_extension', {'mean': 0, 'std': 0})
+        gpmpc_de = gpmpc_timing.get('dyn_extension', {'mean': 0, 'std': 0})
+        de_str_socp = f'{fmpc_socp_de["mean"]:>8.3f} ± {fmpc_socp_de["std"]:>7.3f}' if 'dyn_extension' in fmpc_socp_timing else "—"
+        de_str_gpmpc = f'{gpmpc_de["mean"]:>8.3f} ± {gpmpc_de["std"]:>7.3f}' if 'dyn_extension' in gpmpc_timing else "—"
         print(f'{"Dynamic Extension":<25} | {"—":>20} | {"—":>20} | '
-              f'{de["mean"]:>8.3f} ± {de["std"]:>7.3f}')
+              f'{de_str_socp:>20} | '
+              f'{de_str_gpmpc:>20}')
 
-    print('-'*90)
+    print('-'*115)
     print()
 
 
@@ -249,80 +285,92 @@ def print_summary_table(results_dict):
     Args:
         results_dict (dict): Dictionary containing results for each controller
     """
-    print('\n' + '='*80)
+    print('\n' + '='*100)
     print('SUMMARY: Monte Carlo Experiment Results')
-    print('='*80)
+    print('='*100)
 
     # Extract metrics
     nmpc_metrics = results_dict.get('nmpc', {}).get('metrics', {})
     fmpc_metrics = results_dict.get('fmpc', {}).get('metrics', {})
     fmpc_socp_metrics = results_dict.get('fmpc_socp', {}).get('metrics', {})
+    gpmpc_metrics = results_dict.get('gpmpc', {}).get('metrics', {})
 
     # Print trial statistics first
-    print('\n' + '='*80)
+    print('\n' + '='*100)
     print('TRIAL STATISTICS')
-    print('='*80)
-    print(f'\n{"Statistic":<30} | {"NMPC":>15} | {"FMPC":>15} | {"FMPC+SOCP":>15}')
-    print('-'*80)
+    print('='*100)
+    print(f'\n{"Statistic":<30} | {"NMPC":>15} | {"FMPC":>15} | {"FMPC+SOCP":>15} | {"GPMPC":>15}')
+    print('-'*100)
 
     # Number of trials
     nmpc_n_trials = nmpc_metrics.get('n_trials', 0)
     fmpc_n_trials = fmpc_metrics.get('n_trials', 0)
     fmpc_socp_n_trials = fmpc_socp_metrics.get('n_trials', 0)
+    gpmpc_n_trials = gpmpc_metrics.get('n_trials', 0)
 
     print(f'{"Total Trials":<30} | {nmpc_n_trials:>15d} | '
           f'{fmpc_n_trials:>15d} | '
-          f'{fmpc_socp_n_trials:>15d}')
+          f'{fmpc_socp_n_trials:>15d} | '
+          f'{gpmpc_n_trials:>15d}')
 
     # Successful trials
     nmpc_n_success = nmpc_metrics.get('n_successful', 0)
     fmpc_n_success = fmpc_metrics.get('n_successful', 0)
     fmpc_socp_n_success = fmpc_socp_metrics.get('n_successful', 0)
+    gpmpc_n_success = gpmpc_metrics.get('n_successful', 0)
 
     print(f'{"Successful Trials":<30} | {nmpc_n_success:>15d} | '
           f'{fmpc_n_success:>15d} | '
-          f'{fmpc_socp_n_success:>15d}')
+          f'{fmpc_socp_n_success:>15d} | '
+          f'{gpmpc_n_success:>15d}')
 
     # Failed trials
     nmpc_n_failed = nmpc_metrics.get('n_failed', 0)
     fmpc_n_failed = fmpc_metrics.get('n_failed', 0)
     fmpc_socp_n_failed = fmpc_socp_metrics.get('n_failed', 0)
+    gpmpc_n_failed = gpmpc_metrics.get('n_failed', 0)
 
     print(f'{"Failed Trials":<30} | {nmpc_n_failed:>15d} | '
           f'{fmpc_n_failed:>15d} | '
-          f'{fmpc_socp_n_failed:>15d}')
+          f'{fmpc_socp_n_failed:>15d} | '
+          f'{gpmpc_n_failed:>15d}')
 
     # Success rate
     nmpc_success_rate = nmpc_metrics.get('success_rate', 0)
     fmpc_success_rate = fmpc_metrics.get('success_rate', 0)
     fmpc_socp_success_rate = fmpc_socp_metrics.get('success_rate', 0)
+    gpmpc_success_rate = gpmpc_metrics.get('success_rate', 0)
 
     print(f'{"Success Rate (%)":<30} | {nmpc_success_rate*100:>15.1f} | '
           f'{fmpc_success_rate*100:>15.1f} | '
-          f'{fmpc_socp_success_rate*100:>15.1f}')
+          f'{fmpc_socp_success_rate*100:>15.1f} | '
+          f'{gpmpc_success_rate*100:>15.1f}')
 
-    print('-'*80)
+    print('-'*100)
 
     # Performance metrics (computed over successful trials only)
-    print('\n' + '='*80)
+    print('\n' + '='*100)
     print('PERFORMANCE METRICS (Successful Trials Only)')
-    print('='*80)
-    print(f'\n{"Metric":<30} | {"NMPC":>15} | {"FMPC":>15} | {"FMPC+SOCP":>15}')
-    print('-'*80)
+    print('='*100)
+    print(f'\n{"Metric":<30} | {"NMPC":>15} | {"FMPC":>15} | {"FMPC+SOCP":>15} | {"GPMPC":>15}')
+    print('-'*100)
 
     # Full trajectory RMSE
     print(f'{"Average RMSE (m)":<30} | {nmpc_metrics.get("average_rmse", 0):>15.4f} | '
           f'{fmpc_metrics.get("average_rmse", 0):>15.4f} | '
-          f'{fmpc_socp_metrics.get("average_rmse", 0):>15.4f}')
+          f'{fmpc_socp_metrics.get("average_rmse", 0):>15.4f} | '
+          f'{gpmpc_metrics.get("average_rmse", 0):>15.4f}')
 
     print(f'{"RMSE Std Dev (m)":<30} | {nmpc_metrics.get("rmse_std", 0):>15.4f} | '
           f'{fmpc_metrics.get("rmse_std", 0):>15.4f} | '
-          f'{fmpc_socp_metrics.get("rmse_std", 0):>15.4f}')
+          f'{fmpc_socp_metrics.get("rmse_std", 0):>15.4f} | '
+          f'{gpmpc_metrics.get("rmse_std", 0):>15.4f}')
 
     # Second half RMSE
     nmpc_second_half = (0.0, 0.0)
     fmpc_second_half = (0.0, 0.0)
     fmpc_socp_second_half = (0.0, 0.0)
+    gpmpc_second_half = (0.0, 0.0)
 
     if 'nmpc' in results_dict:
         nmpc_second_half = compute_second_half_rmse(results_dict['nmpc']['trajs_data'])[:2]
@@ -330,37 +378,60 @@ def print_summary_table(results_dict):
         fmpc_second_half = compute_second_half_rmse(results_dict['fmpc']['trajs_data'])[:2]
     if 'fmpc_socp' in results_dict:
         fmpc_socp_second_half = compute_second_half_rmse(results_dict['fmpc_socp']['trajs_data'])[:2]
+    if 'gpmpc' in results_dict:
+        gpmpc_second_half = compute_second_half_rmse(results_dict['gpmpc']['trajs_data'])[:2]
 
     print(f'{"RMSE Second Half (m)":<30} | {nmpc_second_half[0]:>15.4f} | '
           f'{fmpc_second_half[0]:>15.4f} | '
-          f'{fmpc_socp_second_half[0]:>15.4f}')
+          f'{fmpc_socp_second_half[0]:>15.4f} | '
+          f'{gpmpc_second_half[0]:>15.4f}')
 
     print(f'{"RMSE Second Half Std (m)":<30} | {nmpc_second_half[1]:>15.4f} | '
           f'{fmpc_second_half[1]:>15.4f} | '
-          f'{fmpc_socp_second_half[1]:>15.4f}')
+          f'{fmpc_socp_second_half[1]:>15.4f} | '
+          f'{gpmpc_second_half[1]:>15.4f}')
 
-    # Inference time
-    nmpc_time = np.mean(nmpc_metrics.get('avarage_inference_time', [0]))
-    nmpc_time_std = nmpc_metrics.get('inference_time_std', 0)
-    fmpc_time = np.mean(fmpc_metrics.get('avarage_inference_time', [0]))
-    fmpc_time_std = fmpc_metrics.get('inference_time_std', 0)
-    fmpc_socp_time = np.mean(fmpc_socp_metrics.get('avarage_inference_time', [0]))
-    fmpc_socp_time_std = fmpc_socp_metrics.get('inference_time_std', 0)
+    # Inference time - compute from ALL timestep measurements, not trial means
+    # Extract all individual timestep measurements
+    def get_all_inference_times(trajs_data):
+        """Extract all individual timestep inference times from trajectory data."""
+        all_times = []
+        if 'inference_time_data' in trajs_data:
+            for trial_times in trajs_data['inference_time_data']:
+                all_times.extend(trial_times)
+        return all_times if len(all_times) > 0 else [0]
+
+    nmpc_all_times = get_all_inference_times(results_dict.get('nmpc', {}).get('trajs_data', {}))
+    fmpc_all_times = get_all_inference_times(results_dict.get('fmpc', {}).get('trajs_data', {}))
+    fmpc_socp_all_times = get_all_inference_times(results_dict.get('fmpc_socp', {}).get('trajs_data', {}))
+    gpmpc_all_times = get_all_inference_times(results_dict.get('gpmpc', {}).get('trajs_data', {}))
+
+    nmpc_time = np.mean(nmpc_all_times)
+    nmpc_time_std = np.std(nmpc_all_times)
+    fmpc_time = np.mean(fmpc_all_times)
+    fmpc_time_std = np.std(fmpc_all_times)
+    fmpc_socp_time = np.mean(fmpc_socp_all_times)
+    fmpc_socp_time_std = np.std(fmpc_socp_all_times)
+    gpmpc_time = np.mean(gpmpc_all_times)
+    gpmpc_time_std = np.std(gpmpc_all_times)
 
     print(f'{"Avg Inference Time (ms)":<30} | {nmpc_time*1000:>7.2f} ± {nmpc_time_std*1000:>5.2f} | '
           f'{fmpc_time*1000:>7.2f} ± {fmpc_time_std*1000:>5.2f} | '
-          f'{fmpc_socp_time*1000:>7.2f} ± {fmpc_socp_time_std*1000:>5.2f}')
+          f'{fmpc_socp_time*1000:>7.2f} ± {fmpc_socp_time_std*1000:>5.2f} | '
+          f'{gpmpc_time*1000:>7.2f} ± {gpmpc_time_std*1000:>5.2f}')
 
     # Constraint violations
     print(f'{"Failure Rate (%)":<30} | {nmpc_metrics.get("failure_rate", 0)*100:>15.2f} | '
           f'{fmpc_metrics.get("failure_rate", 0)*100:>15.2f} | '
-          f'{fmpc_socp_metrics.get("failure_rate", 0)*100:>15.2f}')
+          f'{fmpc_socp_metrics.get("failure_rate", 0)*100:>15.2f} | '
+          f'{gpmpc_metrics.get("failure_rate", 0)*100:>15.2f}')
 
     print(f'{"Avg Constraint Violations":<30} | {nmpc_metrics.get("average_constraint_violation", 0):>15.2f} | '
           f'{fmpc_metrics.get("average_constraint_violation", 0):>15.2f} | '
-          f'{fmpc_socp_metrics.get("average_constraint_violation", 0):>15.2f}')
+          f'{fmpc_socp_metrics.get("average_constraint_violation", 0):>15.2f} | '
+          f'{gpmpc_metrics.get("average_constraint_violation", 0):>15.2f}')
 
-    print('-'*80)
+    print('-'*100)
     print()
 
     # Print detailed timing breakdown
@@ -416,6 +487,17 @@ def plot_inference_time_violin(results_dict, output_dir='./monte_carlo_results/n
             data_to_plot.append(np.array(fmpc_socp_inf_times) * 1000)  # Convert to ms
             labels.append('FMPC+SOCP')
             colors.append(tum_dia_dark_orange)
+
+    # GPMPC
+    if 'gpmpc' in results_dict:
+        gpmpc_trajs = results_dict['gpmpc']['trajs_data']
+        gpmpc_inf_times = []
+        for traj_inf_time in gpmpc_trajs['inference_time_data']:
+            gpmpc_inf_times.extend(traj_inf_time)
+        if len(gpmpc_inf_times) > 0:
+            data_to_plot.append(np.array(gpmpc_inf_times) * 1000)  # Convert to ms
+            labels.append('GPMPC')
+            colors.append('#DAA520')  # Gold color for GPMPC
 
     if len(data_to_plot) == 0:
         print("No inference time data available for plotting.")
@@ -513,6 +595,8 @@ def plot_tracking_error_distribution(results_dict, output_dir='./monte_carlo_res
         controllers.append(('fmpc', 'FMPC', tum_dia_dark_green))
     if 'fmpc_socp' in results_dict:
         controllers.append(('fmpc_socp', 'FMPC+SOCP', tum_dia_dark_orange))
+    if 'gpmpc' in results_dict:
+        controllers.append(('gpmpc', 'GPMPC', '#DAA520'))
 
     for ctrl_key, ctrl_label, ctrl_color in controllers:
         trajs_data = results_dict[ctrl_key]['trajs_data']
@@ -625,6 +709,8 @@ def plot_position_distribution(results_dict, output_dir='./monte_carlo_results/n
         controllers.append(('fmpc', 'FMPC', tum_dia_dark_green))
     if 'fmpc_socp' in results_dict:
         controllers.append(('fmpc_socp', 'FMPC+SOCP', tum_dia_dark_orange))
+    if 'gpmpc' in results_dict:
+        controllers.append(('gpmpc', 'GPMPC', '#DAA520'))
 
     # First, get reference trajectory from any controller's data
     ref_plotted = False
@@ -835,6 +921,8 @@ def plot_input_distribution(results_dict, output_dir='./monte_carlo_results/norm
         controllers.append(('fmpc', 'FMPC', tum_dia_dark_green))
     if 'fmpc_socp' in results_dict:
         controllers.append(('fmpc_socp', 'FMPC+SOCP', tum_dia_dark_orange))
+    if 'gpmpc' in results_dict:
+        controllers.append(('gpmpc', 'GPMPC', '#DAA520'))
 
     for ctrl_key, ctrl_label, ctrl_color in controllers:
         trajs_data = results_dict[ctrl_key]['trajs_data']
