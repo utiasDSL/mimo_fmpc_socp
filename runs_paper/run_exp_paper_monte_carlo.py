@@ -164,15 +164,43 @@ def copy_config_files(run_dir, config_files, mode):
 
     print(f'\nCopying config files to {configs_dir}:')
 
+    # Track copied filenames to detect duplicates
+    copied_files = {}  # maps basename -> (original_path, saved_as)
+
     for config_file in config_files:
         if os.path.exists(config_file):
-            # Get just the filename
             filename = os.path.basename(config_file)
 
-            # Copy to configs directory
-            dest_path = os.path.join(configs_dir, filename)
+            # Check if this filename has already been copied
+            if filename in copied_files:
+                # Duplicate detected - add parent directory suffix to distinguish
+                parent_dir = os.path.basename(os.path.dirname(config_file))
+                name, ext = os.path.splitext(filename)
+
+                # Create unique filename with parent dir suffix
+                unique_filename = f'{name}_{parent_dir}{ext}'
+                dest_path = os.path.join(configs_dir, unique_filename)
+
+                # Also rename the previously copied file
+                prev_path, prev_saved = copied_files[filename]
+                prev_parent_dir = os.path.basename(os.path.dirname(prev_path))
+                prev_unique = f'{name}_{prev_parent_dir}{ext}'
+                prev_dest = os.path.join(configs_dir, prev_unique)
+
+                # Rename the previous file
+                os.rename(os.path.join(configs_dir, filename), prev_dest)
+                copied_files[filename] = (prev_path, prev_unique)
+
+                print(f'  ✓ {filename} -> {prev_unique} (renamed to avoid conflict)')
+                print(f'  ✓ {filename} -> {unique_filename}')
+            else:
+                # No conflict - copy with original filename
+                dest_path = os.path.join(configs_dir, filename)
+                unique_filename = filename
+                print(f'  ✓ {filename}')
+
             shutil.copy2(config_file, dest_path)
-            print(f'  ✓ {filename}')
+            copied_files[filename] = (config_file, unique_filename)
         else:
             print(f'  ✗ Warning: {config_file} not found')
 
@@ -185,7 +213,12 @@ def copy_config_files(run_dir, config_files, mode):
         f.write(f'Mode: {mode}\n')
         f.write(f'\nConfig files used:\n')
         for config_file in config_files:
-            f.write(f'  - {os.path.basename(config_file)}\n')
+            basename = os.path.basename(config_file)
+            if basename in copied_files:
+                _, saved_as = copied_files[basename]
+                f.write(f'  - {config_file} -> {saved_as}\n')
+            else:
+                f.write(f'  - {config_file} (not found)\n')
         f.write(f'\nDirectory structure:\n')
         f.write(f'  ./run.log            - Complete terminal output log\n')
         f.write(f'  ./configs/           - Configuration files\n')
