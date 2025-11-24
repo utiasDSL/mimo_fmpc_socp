@@ -1,6 +1,6 @@
 algo: fmpc_socp
 algo_config:
-  horizon: 70
+  horizon: 50
   r_mpc:
     - 1.0e-6
     - 1.0e-6

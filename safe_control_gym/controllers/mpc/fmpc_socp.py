@@ -174,6 +174,7 @@ class FlatMPC_SOCP(BaseController):
         self.eta = np.zeros(2)
         A_dyn_ext = np.zeros((2, 2))
         A_dyn_ext[0, 1] = 1.0
+        A_dyn_ext[1, 1] = 0
         B_dyn_ext = np.zeros((2, 2))
         B_dyn_ext[1, 0] = 1.0
         self.Ad_dyn_ext, self.Bd_dyn_ext = discretize_linear_system(A_dyn_ext, B_dyn_ext, self.mpc.dt, exact=True)
@@ -256,11 +257,15 @@ class FlatMPC_SOCP(BaseController):
         use_cvxpygen = cvxpygen_config.get('enabled', False)
         # Verbose flag is passed as parameter (defaults to False)
 
+        # Get thrust velocity bound if specified
+        thrust_vel_max = socp_config.get('thrust_vel_max', None)
+
         # initialize SOCP Filter
         self.filter = DiscreteSOCPFilter(gps, ctrl_mats, np.array(socp_config.input_bound),
                                          normalization_vect=normalization_vect,
                                          slack_weights=d_weights, beta_sqrt=socp_config.beta_sqrt,
-                                         thrust_bound=thrust_max, dyn_ext_mat=dyn_ext_mat,
+                                         thrust_bound=thrust_max, thrust_vel_bound=thrust_vel_max,
+                                         dyn_ext_mat=dyn_ext_mat,
                                          state_bound=state_bound,
                                          use_cvxpygen=use_cvxpygen,
                                          cvxpygen_opts=cvxpygen_config,
@@ -432,6 +437,7 @@ class FlatMPC_SOCP(BaseController):
         self.results_dict['thrust_dot'].append(self.eta[1])
         self.results_dict['gp_time'].append(socp_logging['gp_time'])
         self.results_dict['mpc_solve_time'].append(self.mpc.results_dict['mpc_solve_time'][-1])
+        self.results_dict['goal_states'].append(self.mpc.results_dict['goal_states'][-1])
 
         # Copy MPC warm-start timing breakdown from internal MPC controller
         mpc_timing_fields = ['mpc_extract_time_1', 'mpc_extract_time_2', 'mpc_logging_time_1',

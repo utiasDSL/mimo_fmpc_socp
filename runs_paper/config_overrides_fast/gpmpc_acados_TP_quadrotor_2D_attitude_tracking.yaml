@@ -2,9 +2,9 @@ algo: gpmpc_acados_TP
 algo_config:
   horizon: 50
   q_mpc:
-  - 5.0
+  - 20.0
   - 0.1
-  - 5.0
+  - 20.0
   - 0.1
   - 0.1
   - 0.1

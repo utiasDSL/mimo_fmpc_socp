@@ -638,7 +638,8 @@ def run_monte_carlo_experiment_impl(mode, n_trials, base_seed, gui, run_nmpc, ru
     print_summary_table(results_dict)
 
     # Generate plots
-    plot_inference_time_violin(results_dict, output_dir)
+    plot_inference_time_violin(results_dict, output_dir,
+                              is_constrained=(mode == 'constrained'))
     plot_tracking_error_distribution(results_dict, output_dir, ctrl_freq=50)
     plot_position_distribution(results_dict, output_dir,
                               is_constrained=(mode == 'constrained'),

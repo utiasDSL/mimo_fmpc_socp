@@ -103,7 +103,7 @@ def load_monte_carlo_results(run_dir):
 
     # Load controller results
     results_dict = {}
-    controller_names = ['nmpc', 'fmpc', 'fmpc_socp']
+    controller_names = ['nmpc', 'fmpc', 'fmpc_socp', 'gpmpc']
 
     for controller_name in controller_names:
         trials_file = run_dir / f'{controller_name}_trials.pkl'
@@ -216,7 +216,7 @@ def regenerate_plots(run_dir, output_dir=None, plot_types=None, ctrl_freq=50):
 
     if 'violin' in plot_types:
         print('Generating inference time violin plot...')
-        plot_inference_time_violin(results_dict, str(output_dir))
+        plot_inference_time_violin(results_dict, str(output_dir), is_constrained=is_constrained)
 
     if 'tracking' in plot_types:
         print('Generating tracking error distribution plot...')

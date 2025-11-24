@@ -1,13 +1,13 @@
 algo: mpc
 algo_config:
-  horizon: 40
+  horizon: 50
   r_mpc:
     - 0.1
     - 0.1
   q_mpc:
-    - 5.0
+    - 20.0
     - 0.1
-    - 5.0
+    - 20.0
     - 0.1
     - 0.1
     - 0.1

@@ -128,8 +128,26 @@ class BaseExperiment:
                         if trajs < n_episodes and seeds is not None:
                             seed = seeds[trajs]
                         self.env.save_data()
+                        # Collect controller data after each episode
+                        if ctrl_data is not None:
+                            for data_key, data_val in self.ctrl.results_dict.items():
+                                try:
+                                    ctrl_data[data_key].append(np.array(deepcopy(data_val)))
+                                except ValueError:
+                                    # Handle inhomogeneous data (e.g., GPMPC constraint sets with varying shapes)
+                                    ctrl_data[data_key].append(np.array(deepcopy(data_val), dtype=object))
+                        if self.safety_filter is not None and sf_data is not None:
+                            for data_key, data_val in self.safety_filter.results_dict.items():
+                                try:
+                                    sf_data[data_key].append(np.array(deepcopy(data_val)))
+                                except ValueError:
+                                    # Handle inhomogeneous data
+                                    sf_data[data_key].append(np.array(deepcopy(data_val), dtype=object))
                         if trajs < n_episodes:
-                            obs, info = self._evaluation_reset(ctrl_data=ctrl_data, sf_data=sf_data)
+                            obs, info = self.env.reset(seed=seed) if self.env.env.INFO_IN_RESET else (self.env.reset(seed=seed), None)
+                            self.ctrl.reset_before_run(obs, info, env=self.env)
+                            if self.safety_filter is not None:
+                                self.safety_filter.reset_before_run(env=self.env)
                         break
         elif n_steps is not None:
             while steps < n_steps:
@@ -143,10 +161,18 @@ class BaseExperiment:
                     if steps >= n_steps:
                         self.env.save_data()
                         for data_key, data_val in self.ctrl.results_dict.items():
-                            ctrl_data[data_key].append(np.array(deepcopy(data_val)))
+                            try:
+                                ctrl_data[data_key].append(np.array(deepcopy(data_val)))
+                            except ValueError:
+                                # Handle inhomogeneous data (e.g., GPMPC constraint sets with varying shapes)
+                                ctrl_data[data_key].append(np.array(deepcopy(data_val), dtype=object))
                         if self.safety_filter is not None:
                             for data_key, data_val in self.safety_filter.results_dict.items():
-                                sf_data[data_key].append(np.array(deepcopy(data_val)))
+                                try:
+                                    sf_data[data_key].append(np.array(deepcopy(data_val)))
+                                except ValueError:
+                                    # Handle inhomogeneous data
+                                    sf_data[data_key].append(np.array(deepcopy(data_val), dtype=object))
                         break
                     if done_on_max_steps:
                         done = done and steps >= self.MAX_STEPS
@@ -203,10 +229,18 @@ class BaseExperiment:
             info = None
         if ctrl_data is not None:
             for data_key, data_val in self.ctrl.results_dict.items():
-                ctrl_data[data_key].append(np.array(deepcopy(data_val)))
+                try:
+                    ctrl_data[data_key].append(np.array(deepcopy(data_val)))
+                except ValueError:
+                    # Handle inhomogeneous data (e.g., GPMPC constraint sets with varying shapes)
+                    ctrl_data[data_key].append(np.array(deepcopy(data_val), dtype=object))
         if sf_data is not None and self.safety_filter is not None:
             for data_key, data_val in self.safety_filter.results_dict.items():
-                sf_data[data_key].append(np.array(deepcopy(data_val)))
+                try:
+                    sf_data[data_key].append(np.array(deepcopy(data_val)))
+                except ValueError:
+                    # Handle inhomogeneous data
+                    sf_data[data_key].append(np.array(deepcopy(data_val), dtype=object))
         #self.ctrl.reset()
         self.ctrl.reset_before_run(obs, info, env=self.env)
         if self.safety_filter is not None:

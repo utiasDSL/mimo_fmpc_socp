@@ -20,7 +20,7 @@ except NameError:
         return func
 
 class DiscreteSOCPFilter:
-    def __init__(self, gps, ctrl_mat, input_bound, normalization_vect = np.ones((6,)), slack_weights=[25.0, 250000.0, 25.0], beta_sqrt = [2, 2], state_bound=None, thrust_bound=None, dyn_ext_mat=None, use_cvxpygen=False, cvxpygen_opts=None, solver='CLARABEL', solver_options=None, verbose=False):
+    def __init__(self, gps, ctrl_mat, input_bound, normalization_vect = np.ones((6,)), slack_weights=[25.0, 250000.0, 25.0], beta_sqrt = [2, 2], state_bound=None, thrust_bound=None, thrust_vel_bound=None, dyn_ext_mat=None, use_cvxpygen=False, cvxpygen_opts=None, solver='CLARABEL', solver_options=None, verbose=False):
 
 
         self.gps = gps
@@ -142,6 +142,14 @@ class DiscreteSOCPFilter:
             slacking_vect = np.zeros((1, 7))
             slacking_vect[0, 4] = 1.0
             constraints = constraints + [(Ad_dyn_ext @ self.eta + Bd_dyn_ext @ unnormalize_mat @ self.X)[0] <= thrust_bound + slacking_vect @ self.X + delta_thrust] # better as SOC constraint??
+
+            # Add thrust velocity constraint if specified
+            if thrust_vel_bound is not None:
+                self.thrust_vel_bound = thrust_vel_bound
+                constraints = constraints + [(Ad_dyn_ext @ self.eta + Bd_dyn_ext @ unnormalize_mat @ self.X)[1] <= thrust_vel_bound]
+                constraints = constraints + [-(Ad_dyn_ext @ self.eta + Bd_dyn_ext @ unnormalize_mat @ self.X)[1] <= thrust_vel_bound]
+            else:
+                self.thrust_vel_bound = None
 
             
         # define cost function

@@ -249,6 +249,7 @@ class FlatMPC_EXT(BaseController):
         self.results_dict['v_inp'].append(vd)
         self.results_dict['u_ext'].append(action_extended)
         self.results_dict['mpc_solve_time'].append(self.mpc.results_dict['mpc_solve_time'][-1])
+        self.results_dict['goal_states'].append(self.mpc.results_dict['goal_states'][-1])
         self.results_dict['thrust_dot'].append(self.eta[1])
 
         return action

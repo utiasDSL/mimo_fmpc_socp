@@ -1,17 +1,17 @@
 algo: fmpc_socp
 algo_config:
-  horizon: 70
+  horizon: 50
   r_mpc:
     - 1.0e-6
     - 1.0e-6
   q_mpc: 
-    - 10
+    - 45
     - 0.001
-    - 0.1
     - 0.001
-    - 10
     - 0.001
-    - 0.1
+    - 45
+    - 0.001
+    - 0.001
     - 0.001
   # Prior info
   prior_info:
@@ -33,10 +33,11 @@ algo_config:
     slack_weight_dyn_ext: 700000.0
     slack_weight_state: 250000.0
     input_bound:
-      - 10
+      - 10 # 5 works well with Q 17.
       - 1.5
     apply_thrust_constraint: True
     thrust_max: 0.43
+    thrust_vel_max: 1.0 # Maximum thrust rate of change (T_c_dot) to prevent overshoot during transients
     # Solver configuration
     solver: CLARABEL  # Options: 'MOSEK' or 'CLARABEL'
     solver_options:
@@ -45,10 +46,14 @@ algo_config:
       tol_feas: 1.0e-6
       tol_gap_abs: 1.0e-6
       tol_gap_rel: 1.0e-6
+      #tol_infeas_abs: 1.0e-6
+      #tol_infeas_rel: 1.0e-6
+      #tol_ktratio: 1.0e-5
       verbose: false
       # MOSEK options (uncomment when using MOSEK solver)
       #MSK_DPAR_INTPNT_CO_TOL_REL_GAP: 1.0e-6
-      #MSK_DPAR_INTPNT_CO_TOL_PFEAS: 1.0e-6
+      #MSK_DPAR_INTPNT_CO
+      # MSK_TOL_PFEAS: 1.0e-6
       #MSK_DPAR_INTPNT_CO_TOL_DFEAS: 1.0e-6
     cvxpygen:
       enabled: true
