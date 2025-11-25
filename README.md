@@ -43,7 +43,7 @@ python3 -m pip install -e .
 ### SOCP Solver Requirements
 
 **CLARABEL Solver:**
-The SOCP is solved using the [CLARABEL](https://github.com/oxfordcontrol/Clarabel.rs) solver. CLARABEL is an open-source interior-point conic solver that supports second-order cone constraints. Its installation is automatically performed, however, you may beed to install `rust` and `eigen` for code generation. Please see the `CVXPYgen` and `CLARABEL` installation instructions.
+The SOCP is solved using the [CLARABEL](https://github.com/oxfordcontrol/Clarabel.rs) solver. CLARABEL is an open-source interior-point conic solver that supports second-order cone constraints. Its installation is automatically performed, however, you may need to install `rust` and `eigen` for code generation. Please see the `CVXPYgen` and `CLARABEL` installation instructions in their respective repositories.
 
 **CVXPYgen:**
 We use [cvxpygen](https://github.com/cvxgrp/cvxpygen) for efficient code generation of CVXPY problems. This is installed automatically as part of the dependencies.
