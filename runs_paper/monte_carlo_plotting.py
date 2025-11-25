@@ -477,22 +477,22 @@ def print_summary_table(results_dict, remove_outliers_timing=True, iqr_multiplie
         print(f'{"  (outliers removed)":<30} | {"  IQR method":>15} | {"  IQR method":>15} | '
               f'{"  IQR method":>15} | {"  IQR method":>15}')
 
-    # Constraint violations
-    print(f'{"Failure Rate (%)":<30} | {nmpc_metrics.get("failure_rate", 0)*100:>15.2f} | '
-          f'{fmpc_metrics.get("failure_rate", 0)*100:>15.2f} | '
-          f'{fmpc_socp_metrics.get("failure_rate", 0)*100:>15.2f} | '
-          f'{gpmpc_metrics.get("failure_rate", 0)*100:>15.2f}')
+    # Constraint violations (commented out - kept in code but not displayed)
+    # print(f'{"Failure Rate (%)":<30} | {nmpc_metrics.get("failure_rate", 0)*100:>15.2f} | '
+    #       f'{fmpc_metrics.get("failure_rate", 0)*100:>15.2f} | '
+    #       f'{fmpc_socp_metrics.get("failure_rate", 0)*100:>15.2f} | '
+    #       f'{gpmpc_metrics.get("failure_rate", 0)*100:>15.2f}')
 
-    print(f'{"Avg Constraint Violations":<30} | {nmpc_metrics.get("average_constraint_violation", 0):>15.2f} | '
-          f'{fmpc_metrics.get("average_constraint_violation", 0):>15.2f} | '
-          f'{fmpc_socp_metrics.get("average_constraint_violation", 0):>15.2f} | '
-          f'{gpmpc_metrics.get("average_constraint_violation", 0):>15.2f}')
+    # print(f'{"Avg Constraint Violations":<30} | {nmpc_metrics.get("average_constraint_violation", 0):>15.2f} | '
+    #       f'{fmpc_metrics.get("average_constraint_violation", 0):>15.2f} | '
+    #       f'{fmpc_socp_metrics.get("average_constraint_violation", 0):>15.2f} | '
+    #       f'{gpmpc_metrics.get("average_constraint_violation", 0):>15.2f}')
 
     print('-'*100)
     print()
 
-    # Print detailed timing breakdown
-    print_timing_breakdown_table(results_dict)
+    # Print detailed timing breakdown (commented out - kept in code but not displayed)
+    # print_timing_breakdown_table(results_dict)
 
 
 def plot_inference_time_violin(results_dict, output_dir='./monte_carlo_results/normal',

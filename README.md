@@ -3,7 +3,7 @@ This repo contains the code to reproduce the experiments in the paper "Multi-inp
 
 <img src="figures/blockdiagram.png" alt="block diagram" width="800">
 
-Learning-based control techniques are used to control systems with uncertain dynamics by leveraging data from past trajectories to learn a system model. However, learning-based controllers are often computationally inefficient, limiting their use in practice. To address this limitation, we propose a learning-based controller that exploits differential flatness—a structural property of many useful systems—for the efficient control of general nonlinear affine multi-input differentially flat systems. Recent research on exploiting flatness for learning-based control either doesn’t  account for input constraints, is only formulated for single-input systems, or is specialized for a specific system (i.e., a quadrotor). In contrast, our approach uses a safety filter that guarantees probabilistic asymptotic stability, probabilistic flat state constraint satisfaction, and can account for constraints on the system input. Additionally, our proposed controller is composed of two sequential convex optimizations, enabling efficient control while relying solely on learned dynamics. Using a quadrotor simulation, we show that our approach achieves similar performance as a nonlinear model predictive controller that has perfect knowledge of the system dynamics, validating the functionality of our approach for learning-based control.
+Learning-based control techniques use data from past trajectories to control systems with uncertain dynamics. However, learning-based controllers are often computationally inefficient, limiting their practicality. To address this limitation, we propose a learning-based controller that exploits differential flatness, a property of many robotic systems. Recent research on using flatness for learning-based control either is limited in that it (i) ignores input constraints, (ii) applies only to single-input systems, or (iii) is tailored to specific platforms. In contrast, our approach uses a system extension and block-diagonal cost formulation to control general multi-input, nonlinear, affine systems. Furthermore, it satisfies input and half-space flat state constraints and guarantees probabilistic Lyapunov decrease using only two sequential convex optimizations. We show that our approach performs similarly to, but is multiple times more efficient than, a Gaussian process model predictive controller in simulated and real experimental quadrotor tracking tasks.
 
 This code is based on [safe-control-gym](https://github.com/utiasDSL/safe-control-gym/). The GP implementation with affine kernel is based on [fmpc_socp](https://github.com/utiasDSL/fmpc_socp)
 
@@ -107,7 +107,8 @@ python3 run_exp_paper_monte_carlo.py --mode normal --n_trials 30 --controllers f
 python3 run_exp_paper_monte_carlo.py --mode normal --n_trials 2 --gui
 ```
 
-Available controllers: `mpc` (NMPC), `fmpc` (FMPC), `fmpc_socp` (proposed approach), `gpmpc` (GPMPC baseline). 
+Available controllers: `mpc` (NMPC), `fmpc` (FMPC), `fmpc_socp` (proposed approach), `gpmpc` (GPMPC baseline).
+
 
 ## Citing
 TBD  once published. 
@@ -188,3 +189,66 @@ This script:
 - Algorithm config: `gp/config_overrides/gpmpc_acados_TP_training.yaml`
 
 The GPMPC controller configs in `runs_paper/config_overrides_*/` will automatically reference the most recent trained models via the `gp_model_path` parameter.
+
+### Visualizing and Analyzing Results
+
+**Interactive Viewer:**
+
+To browse and visualize Monte Carlo experiment results with a GUI:
+
+```bash
+cd runs_paper/
+./launch_viewer.sh
+```
+
+This launches an interactive application that allows you to:
+- Load any timestamped Monte Carlo run
+- Select specific controllers and trials
+- Plot individual state trajectories (x, ẋ, z, ż, θ, θ̇) and inputs (T_c, θ_c)
+- View trial information and initial conditions
+- Interactive matplotlib plots with zoom/pan/save capabilities
+
+**Regenerating Plots:**
+
+To regenerate plots from previously saved Monte Carlo results without re-running experiments:
+
+```bash
+cd runs_paper/
+./regen_plots.sh
+```
+
+This script:
+1. Prompts you to select a result directory (normal or constrained mode)
+2. Lists available timestamped result sets
+3. Regenerates all comparison plots (state trajectories, inputs, timing, etc.)
+4. Useful for creating publication-quality figures with modified plotting parameters
+
+### Hardware Experiment Results
+
+To plot the hardware experiment results included in the paper:
+
+```bash
+cd runs_paper/
+python3 plot_hardware_consistent.py
+```
+
+This script generates plots comparing the hardware experimental data for:
+- **Unconstrained tracking**: Data from `hardware_data/unconstrained/`
+- **Constrained tracking**: Data from `hardware_data/constrained/`
+
+The plots show state trajectories, control inputs, and tracking performance from real quadrotor flight experiments, validating the simulation results.
+
+
+### Simulation Figures:
+
+**Unconstrained**:
+<img src="figures/normal/position_distribution.png" alt="block diagram" width="400">
+<img src="figures/normal/tracking_error_distribution.png" alt="block diagram" width="400">
+<img src="figures/normal/input_distribution.png" alt="block diagram" width="400">
+<img src="figures/normal/inference_time_violin.png" alt="block diagram" width="400">
+
+**Constrained**:
+<img src="figures/constrained/position_distribution.png" alt="block diagram" width="400">
+<img src="figures/constrained/tracking_error_distribution.png" alt="block diagram" width="400">
+<img src="figures/constrained/input_distribution.png" alt="block diagram" width="400">
+<img src="figures/constrained/inference_time_violin.png" alt="block diagram" width="400">

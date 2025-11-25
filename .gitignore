@@ -21,7 +21,7 @@ hpo_study*/
 hp_study*/
 comparisons/
 
-runs_paper/hardware_data/
+runs_paper/monte_carlo_results/*
 
 
 # macOS users
