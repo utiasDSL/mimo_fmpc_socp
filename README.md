@@ -242,12 +242,14 @@ The plots show state trajectories, control inputs, and tracking performance from
 ### Simulation Figures:
 
 **Unconstrained**:
+
 <img src="figures/normal/position_distribution.png" alt="block diagram" width="400">
 <img src="figures/normal/tracking_error_distribution.png" alt="block diagram" width="400">
 <img src="figures/normal/input_distribution.png" alt="block diagram" width="400">
 <img src="figures/normal/inference_time_violin.png" alt="block diagram" width="400">
 
 **Constrained**:
+
 <img src="figures/constrained/position_distribution.png" alt="block diagram" width="400">
 <img src="figures/constrained/tracking_error_distribution.png" alt="block diagram" width="400">
 <img src="figures/constrained/input_distribution.png" alt="block diagram" width="400">
