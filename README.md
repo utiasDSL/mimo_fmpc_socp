@@ -1,4 +1,4 @@
-# Multi-input Second Order Cone Safety Filtering for Constrained Learning-based Flat Model Predictive Control
+# Exploiting Differential Flatness for Efficient Learning-based Model Predictive Control Under Constraints
 This repo contains the code to reproduce the experiments in the paper "Multi-input Second Order Cone Safety Filtering for Constrained Learning-based Flat Model Predictive Control".
 
 <img src="figures/blockdiagram.png" alt="block diagram" width="800">
