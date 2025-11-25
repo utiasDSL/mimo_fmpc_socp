@@ -37,7 +37,7 @@ class FlatMPC_EXT(BaseController):
             constraint_tol: float = 1e-8,
             solver: str = 'sqpmethod',
             use_full_flat_reference=True,
-            output_dir='results/temp',
+            output_dir='generated_acados_c_code',
             additional_constraints=None,
             use_acados=False,
             flat_state_constraint = dict,

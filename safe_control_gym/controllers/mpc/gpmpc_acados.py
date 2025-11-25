@@ -66,7 +66,7 @@ class GPMPC_ACADOS(GPMPC):
             # inertial_prop: list = [1.0],
             prior_param_coeff: float = 1.0,
             terminate_run_on_done: bool = True,
-            output_dir: str = 'results/temp',
+            output_dir: str = 'generated_acados_c_code',
             compute_ipopt_initial_guess: bool = True,
             use_RTI: bool = False,
             use_linear_prior: bool = True,

@@ -51,7 +51,7 @@ class MPC(BaseController):
             constraint_tol: float = 1e-6,
             # runner args
             # shared/base args
-            output_dir: str = 'results/temp',
+            output_dir: str = 'generated_acados_c_code',
             additional_constraints: list = None,
             use_gpu: bool = False,
             seed: int = 0,

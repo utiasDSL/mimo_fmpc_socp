@@ -12,7 +12,8 @@ Results/
 experiments/mpsc/results*
 experiments/mpsc/models/rl_models*
 #
-results/
+# ACADOS generated code directory (configurable via output_dir parameter)
+generated_acados_c_code/
 z_docstring.py
 TODOs.md
 #

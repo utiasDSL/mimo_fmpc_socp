@@ -11,7 +11,7 @@ algo_config:
   r_mpc:
   - 1
   - 1
-  gp_model_path: ./gpmpc_acados_TP/results/100_200_10/temp/seed-_Oct-31-10-30-18_efa10dd # On traj, 100 Hz. 200 pts
+  gp_model_path: ../gp/gpmpc_acados_TP/results/100_200_10/temp/seed-_Nov-24-16-13-03_15575c3 # On traj, 100 Hz. 200 pts
   test_data_ratio: 0.2
   soft_constraints: null
   optimization_iterations:

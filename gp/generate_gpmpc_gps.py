@@ -37,8 +37,8 @@ def run_gpmpc_tp(gui=False, seed=1, save_data=True):
     CTRL_ADD = ''
 
     # Check if config files exist
-    task_config_path = f'./config_overrides_gpmpc_training/quadrotor_2D_attitude_tracking.yaml'
-    algo_config_path = f'./config_overrides_gpmpc_training/gpmpc_acados_TP_training.yaml'
+    task_config_path = f'./config_overrides/quadrotor_2D_attitude_tracking.yaml'
+    algo_config_path = f'./config_overrides/gpmpc_acados_TP_training.yaml'
 
     assert os.path.exists(task_config_path), f'{task_config_path} does not exist'
     assert os.path.exists(algo_config_path), f'{algo_config_path} does not exist'
@@ -232,7 +232,6 @@ def plot_quad_eval(res, env, save_path=None):
 
     if save_path is not None:
         plt.savefig(os.path.join(save_path, 'state_trajectories.png'))
-        plt.savefig('./state_trajectories.png')
 
     # Plot inputs
     _, axs = plt.subplots(model.nu, figsize=(8, model.nu * 1))
@@ -251,7 +250,6 @@ def plot_quad_eval(res, env, save_path=None):
 
     if save_path is not None:
         plt.savefig(os.path.join(save_path, 'input_trajectories.png'))
-        plt.savefig('./input_trajectories.png')
 
     # Plot state path in x-z plane with tracking error
     fig, axs = plt.subplots(2, figsize=(8, 8))
@@ -278,7 +276,6 @@ def plot_quad_eval(res, env, save_path=None):
     fig.tight_layout()
     if save_path is not None:
         plt.savefig(os.path.join(save_path, 'state_xz_path.png'))
-        plt.savefig('./state_xz_path.png')
         print(f'Plots saved to {save_path}')
 
     # Plot x-y plane for 3D quadrotors
@@ -296,7 +293,6 @@ def plot_quad_eval(res, env, save_path=None):
         fig.tight_layout()
         if save_path is not None:
             plt.savefig(os.path.join(save_path, 'state_xy_path.png'))
-            plt.savefig('./state_xy_path.png')
 
     # Plot constraint violations
     fig, axs = plt.subplots(len(constraint_stack[0]), figsize=(8, len(constraint_stack[0]) * 1))
@@ -362,7 +358,6 @@ def plot_quad_eval(res, env, save_path=None):
 
         if save_path is not None:
             plt.savefig(os.path.join(save_path, 'xyz_tracking_errors.png'))
-            plt.savefig('./xyz_tracking_errors.png')
 
 
 if __name__ == '__main__':

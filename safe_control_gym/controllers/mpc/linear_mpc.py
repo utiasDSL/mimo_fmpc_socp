@@ -37,7 +37,7 @@ class LinearMPC(MPC):
             solver: str = 'sqpmethod',
             # runner args
             # shared/base args
-            output_dir='results/temp',
+            output_dir='generated_acados_c_code',
             additional_constraints=None,
             use_lqr_gain_and_terminal_cost: bool = False,
             **kwargs):

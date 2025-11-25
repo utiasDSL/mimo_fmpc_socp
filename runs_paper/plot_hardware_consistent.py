@@ -127,16 +127,16 @@ if __name__ == "__main__":
     constraint_input = 0.41
     ctrl_freq = 50  # Hz
 
-    # Data paths (from plot_hardware.py)
-    nmpc_path = '/home/ahall/Documents/UofT/papers/mimo_fmpc_socp_gp_ecc/mimo_fmpc_socp/runs_paper/hardware_data/Run5_unconstrainedDark2/data_20250421_211431.csv'
-    fmpc_path = '/home/ahall/Documents/UofT/papers/mimo_fmpc_socp_gp_ecc/mimo_fmpc_socp/runs_paper/hardware_data/Run5_unconstrainedDark2/data_20250421_211350.csv'
+    # Data paths
+    nmpc_path = './hardware_data/unconstrained/data_20250421_211431.csv'
+    fmpc_path = './hardware_data/unconstrained/data_20250421_211350.csv'
 
     if PLOT_CONSTRAINED:
-        socp_path = '/home/ahall/Documents/UofT/papers/mimo_fmpc_socp_gp_ecc/mimo_fmpc_socp/runs_paper/hardware_data/eager-galaxy-308/data_20250422_143652.csv'
-        save_path = '/home/ahall/Documents/UofT/papers/mimo_fmpc_socp_gp_ecc/mimo_fmpc_socp/runs_paper/hardware_data/eager-galaxy-308/plots/'
+        socp_path = './hardware_data/constrained/data_20250422_143652.csv'
+        save_path = './hardware_data/constrained/plots/'
     else:
-        socp_path = '/home/ahall/Documents/UofT/papers/mimo_fmpc_socp_gp_ecc/mimo_fmpc_socp/runs_paper/hardware_data/Run5_unconstrainedDark2/data_20250421_211307.csv'
-        save_path = '/home/ahall/Documents/UofT/papers/mimo_fmpc_socp_gp_ecc/mimo_fmpc_socp/runs_paper/hardware_data/Run5_unconstrainedDark2/plots/'
+        socp_path = './hardware_data/unconstrained/data_20250421_211307.csv'
+        save_path = './hardware_data/unconstrained/plots/'
     # Prepare data
     results_dict = {}
 
