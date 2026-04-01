@@ -2,6 +2,7 @@ import torch
 import gpytorch
 import numpy as np
 import matplotlib.pyplot as plt
+import json
 
 from safe_control_gym.controllers.mpc.flat_gp_utils import GaussianProcess, ZeroMeanAffineGP
 
@@ -10,8 +11,54 @@ from scipy.spatial.distance import pdist, squareform
 import pickle 
 import os
 import sys
+import argparse
 
 from copy import deepcopy
+
+
+def compute_regression_metrics(targets, means, preds):
+    lower, upper = preds.confidence_region()
+    targets_np = np.asarray(targets).reshape(-1)
+    means_np = means.detach().numpy().reshape(-1)
+    lower_np = lower.detach().numpy().reshape(-1)
+    upper_np = upper.detach().numpy().reshape(-1)
+    std_np = ((upper_np - lower_np) / 4.0).reshape(-1)
+    errors = means_np - targets_np
+    metrics = {
+        'rmse': float(np.sqrt(np.mean(errors ** 2))),
+        'mae': float(np.mean(np.abs(errors))),
+        'max_abs_error': float(np.max(np.abs(errors))),
+        'mean_abs_error': float(np.mean(np.abs(errors))),
+        'within_1sigma': float(np.mean(np.abs(errors) <= std_np)),
+        'within_2sigma': float(np.mean((targets_np >= lower_np) & (targets_np <= upper_np))),
+        'target_mean': float(np.mean(targets_np)),
+        'target_std': float(np.std(targets_np)),
+        'pred_mean': float(np.mean(means_np)),
+        'pred_std': float(np.std(means_np)),
+        'uncertainty_mean': float(np.mean(std_np)),
+        'uncertainty_max': float(np.max(std_np)),
+        'num_points': int(targets_np.shape[0]),
+    }
+    return metrics, lower_np, upper_np
+
+
+def save_split_artifacts(output_dir, split_name, inputs, targets, means, preds):
+    metrics, lower_np, upper_np = compute_regression_metrics(targets, means, preds)
+    means_np = means.detach().numpy().reshape(-1)
+    targets_np = np.asarray(targets).reshape(-1)
+    np.savez(
+        os.path.join(output_dir, f'{split_name}_predictions.npz'),
+        inputs=np.asarray(inputs),
+        targets=targets_np,
+        pred_mean=means_np,
+        pred_lower=lower_np,
+        pred_upper=upper_np,
+        pred_std=(upper_np - lower_np) / 4.0,
+        errors=means_np - targets_np,
+    )
+    with open(os.path.join(output_dir, f'{split_name}_metrics.json'), 'w') as file:
+        json.dump(metrics, file, indent=2, sort_keys=True)
+    return metrics
 
 def plot_data(states, time, title, label_x):
     '''plot states 
@@ -52,7 +99,7 @@ def plot_trained_gp(targets, means, preds, fig_count=0, show=False):
         plt.show()
     return fig_count
 
-def train_gp(output_dir, inputs_train, targets_train, inputs_eval, targets_eval, PLOT=True):
+def train_gp(output_dir, inputs_train, targets_train, inputs_eval, targets_eval, PLOT=True, initial_noise=None):
     # Check if the folder exists, and create it if not
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -68,13 +115,21 @@ def train_gp(output_dir, inputs_train, targets_train, inputs_eval, targets_eval,
     # Setup GP
     gp_type = ZeroMeanAffineGP
     likelihood = gpytorch.likelihoods.GaussianLikelihood()
+    if initial_noise is not None:
+        likelihood.noise = torch.as_tensor(float(initial_noise), dtype=torch.double)
     gp = GaussianProcess(gp_type, likelihood, 1, output_dir)
 
     fname = os.path.join(output_dir, 'training_output.txt')
     orig_stdout = sys.stdout
     with open(fname,'w', 1) as print_to_file:
         sys.stdout = print_to_file
-        loss_list = gp.train(train_in, train_tar.squeeze(), n_train=N_train, learning_rate=learning_rate)
+        loss_list = gp.train(
+            train_in,
+            train_tar.squeeze(),
+            n_train=N_train,
+            learning_rate=learning_rate,
+            gpu=torch.cuda.is_available(),
+        )
     sys.stdout = orig_stdout
 
     if PLOT:
@@ -99,7 +154,9 @@ def train_gp(output_dir, inputs_train, targets_train, inputs_eval, targets_eval,
     means, covs, preds = gp.predict(train_in)
     errors = means - train_tar.squeeze()
     abs_errors = torch.abs(errors)
+    train_metrics = save_split_artifacts(output_dir, 'train', train_in.numpy(), train_tar.numpy(), means, preds)
     print('Training set mean error:', torch.mean(abs_errors).numpy())
+    print('Training metrics:', json.dumps(train_metrics, indent=2, sort_keys=True))
     if PLOT:
         figcount = plot_trained_gp(train_tar, means, preds, 3)
 
@@ -130,7 +187,12 @@ def train_gp(output_dir, inputs_train, targets_train, inputs_eval, targets_eval,
         figcount = plot_trained_gp(targets_eval, mean_eval, preds, figcount)
     errors = mean_eval - targets_eval.squeeze()
     abs_errors = torch.abs(errors)
+    eval_metrics = save_split_artifacts(output_dir, 'eval', inputs_eval, targets_eval, mean_eval, preds)
     print('Eval set mean error:', torch.mean(abs_errors).numpy())
+    print('Eval metrics:', json.dumps(eval_metrics, indent=2, sort_keys=True))
+
+    with open(os.path.join(output_dir, 'metrics_summary.json'), 'w') as file:
+        json.dump({'train': train_metrics, 'eval': eval_metrics}, file, indent=2, sort_keys=True)
 
     if PLOT:
         plt.show()
@@ -192,14 +254,25 @@ def prepare_data(inputs_raw, targets_raw, threshold, noise_std, normalization_va
 
 ######################################################################################################################
 # Parameters
+parser = argparse.ArgumentParser()
+parser.add_argument('--gp', type=int, choices=[0, 1], default=0, help='Which GP to train.')
+parser.add_argument('--plot', action='store_true', help='Enable plotting.')
+parser.add_argument('--iterations', type=int, default=None, help='Optional training iteration override.')
+parser.add_argument('--output_dir', type=str, default=None, help='Optional output directory override.')
+parser.add_argument('--initial_noise', type=float, default=None, help='Optional initial likelihood noise.')
+args = parser.parse_args()
+
 seed = 43
-PLOT = True
+PLOT = args.plot
 
 # run from folder
 training_data_file = './fgp/gp_train_data_noisyFig8.pkl'
 eval_data_file = './fgp/gp_test_data.pkl' 
 
-N_train = 2000 # number of training iterations in the GP
+# Default to the longer budget for gp_v0 and the original budget for gp_v1.
+N_train = args.iterations if args.iterations is not None else (5000 if args.gp == 0 else 2000)
+# Default to a higher initial noise only for gp_v0.
+initial_noise = args.initial_noise if args.initial_noise is not None else (8.0 if args.gp == 0 else None)
 learning_rate = 0.02
 
 noise_std_list = [2, 1.4] # for artificial noise
@@ -239,7 +312,7 @@ inputs_eval = inputs_eval/normalization_vals # normalize with same vector as bef
 
 ##########
 # Stuff specific to each GP 
-do_gp_nr = 1 # which GP to train, 0 or 1
+do_gp_nr = args.gp # which GP to train, 0 or 1
 
 targets_raw_gp = targets_train_raw[:, do_gp_nr]
 targets_eval = targets_eval[:, do_gp_nr] 
@@ -248,6 +321,5 @@ targets_eval = targets_eval[:, do_gp_nr]
 inputs_train, targets_train = prepare_data(inputs_train_raw, targets_raw_gp, threshold[do_gp_nr], noise_std_list[do_gp_nr], normalization_vals, seed, PLOT)
 
 # GP training and testing
-output_dir = f'./fgp/gp_v{do_gp_nr}'
-train_gp(output_dir, inputs_train, targets_train, inputs_eval, targets_eval, PLOT)
-
+output_dir = args.output_dir if args.output_dir is not None else f'./fgp/gp_v{do_gp_nr}'
+train_gp(output_dir, inputs_train, targets_train, inputs_eval, targets_eval, PLOT, initial_noise=initial_noise)

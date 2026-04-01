@@ -9,6 +9,7 @@ For hardware data, we have single runs (not distributions), but the plotting fun
 will handle this correctly by plotting the single trajectory.
 """
 
+import argparse
 import os
 import sys
 import numpy as np
@@ -105,13 +106,44 @@ def prepare_hardware_data_for_plotting(file_path, status=None):
     return trajs_data
 
 
+def compute_hardware_metrics(trajs_data):
+    """Compute single-run RMSE metrics in Monte-Carlo-compatible format."""
+    rmse_values = []
+
+    for episode_info in trajs_data['info']:
+        mse_values = [info['mse'] for info in episode_info if 'mse' in info]
+        if mse_values:
+            rmse_values.append(float(np.sqrt(np.mean(mse_values))))
+
+    average_rmse = float(np.mean(rmse_values)) if rmse_values else 0.0
+    rmse_std = float(np.std(rmse_values)) if rmse_values else 0.0
+
+    return {
+        'n_trials': len(rmse_values),
+        'n_successful': len(rmse_values),
+        'n_failed': 0,
+        'success_rate': 1.0 if rmse_values else 0.0,
+        'average_rmse': average_rmse,
+        'rmse_std': rmse_std,
+    }
+
+
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Generate hardware plot previews.')
+    parser.add_argument('--constrained', action='store_true',
+                        help='Use constrained hardware dataset')
+    parser.add_argument('--legend_rmse', action='store_true',
+                        help='Append single-run RMSE to supported legend labels')
+    parser.add_argument('--output_dir', type=str,
+                        help='Optional output directory override')
+    args = parser.parse_args()
+
     # Configuration
     status = Status.TRACK_TRAJ  # Only plot tracking portion
 
     # Specify the data by setting either the run_name or the file_name
-    PLOT_CONSTRAINED = False 
+    PLOT_CONSTRAINED = args.constrained
 
 
     SHADE_STATE_CONSTRAINT = True
@@ -142,20 +174,29 @@ if __name__ == "__main__":
 
     if SHOW_NMPC:
         print("Loading NMPC data...")
+        trajs_data = prepare_hardware_data_for_plotting(nmpc_path, status=status)
         results_dict['nmpc'] = {
-            'trajs_data': prepare_hardware_data_for_plotting(nmpc_path, status=status)
+            'trajs_data': trajs_data,
+            'metrics': compute_hardware_metrics(trajs_data)
         }
 
     if SHOW_FMPC:
         print("Loading FMPC data...")
+        trajs_data = prepare_hardware_data_for_plotting(fmpc_path, status=status)
         results_dict['fmpc'] = {
-            'trajs_data': prepare_hardware_data_for_plotting(fmpc_path, status=status)
+            'trajs_data': trajs_data,
+            'metrics': compute_hardware_metrics(trajs_data)
         }
 
     print("Loading FMPC+SOCP data...")
+    trajs_data = prepare_hardware_data_for_plotting(socp_path, status=status)
     results_dict['fmpc_socp'] = {
-        'trajs_data': prepare_hardware_data_for_plotting(socp_path, status=status)
+        'trajs_data': trajs_data,
+        'metrics': compute_hardware_metrics(trajs_data)
     }
+
+    if args.output_dir:
+        save_path = args.output_dir
 
     # Generate plots using the EXACT functions from monte_carlo_plotting.py
     print("\n" + "="*80)
@@ -167,13 +208,16 @@ if __name__ == "__main__":
 
     plot_position_distribution(results_dict, save_path,
                               is_constrained=SHADE_STATE_CONSTRAINT,
-                              constraint_state=constraint_state)
+                              constraint_state=constraint_state,
+                              include_rmse_in_legend=args.legend_rmse)
 
-    plot_tracking_error_distribution(results_dict, save_path, ctrl_freq=ctrl_freq)
+    plot_tracking_error_distribution(results_dict, save_path, ctrl_freq=ctrl_freq,
+                                     include_rmse_in_legend=args.legend_rmse)
 
     plot_input_distribution(results_dict, save_path, ctrl_freq=ctrl_freq,
                            is_constrained=SHADE_INPUT_CONSTRAINT,
-                           constraint_input=constraint_input)
+                           constraint_input=constraint_input,
+                           include_rmse_in_legend=args.legend_rmse)
 
     print("\n" + "="*80)
     print("All plots generated successfully!")

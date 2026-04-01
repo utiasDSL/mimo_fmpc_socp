@@ -173,8 +173,6 @@ Metric                         |            NMPC |            FMPC |      FMPC+S
 Average RMSE (m)               |          0.0234 |          0.0245 |          0.0238
 RMSE Std Dev (m)               |          0.0012 |          0.0015 |          0.0011
 Avg Inference Time (ms)        |           12.34 |            8.56 |           15.67
-Failure Rate (%)               |            0.00 |            0.00 |            0.00
-Avg Constraint Violations      |            0.00 |            0.00 |            0.00
 --------------------------------------------------------------------------------
 
 Results saved to: ./monte_carlo_results/normal

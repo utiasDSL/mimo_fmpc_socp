@@ -24,6 +24,19 @@ plt.rcParams.update({
     })
 
 
+def format_controller_label(results_dict, ctrl_key, base_label, include_rmse=False):
+    """Optionally append average trajectory RMSE to a controller label."""
+    if not include_rmse:
+        return base_label
+
+    metrics = results_dict.get(ctrl_key, {}).get('metrics', {})
+    average_rmse = metrics.get('average_rmse')
+    if average_rmse is None:
+        return base_label
+
+    return f'{base_label} ({average_rmse:.3f} m)'
+
+
 def remove_outliers_iqr(data, multiplier=1.5):
     """Remove outliers using IQR (Interquartile Range) method.
 
@@ -658,7 +671,8 @@ def plot_inference_time_violin(results_dict, output_dir='./monte_carlo_results/n
     print(f'Violin plot (PNG) saved to: {output_path_png}')
 
 
-def plot_tracking_error_distribution(results_dict, output_dir='./monte_carlo_results/normal', ctrl_freq=50):
+def plot_tracking_error_distribution(results_dict, output_dir='./monte_carlo_results/normal',
+                                    ctrl_freq=50, include_rmse_in_legend=False):
     """Create plot showing tracking error distribution over time for each controller.
 
     Args:
@@ -702,6 +716,12 @@ def plot_tracking_error_distribution(results_dict, output_dir='./monte_carlo_res
 
     for ctrl_key, ctrl_label, ctrl_color in controllers:
         trajs_data = results_dict[ctrl_key]['trajs_data']
+        legend_label = format_controller_label(
+            results_dict,
+            ctrl_key,
+            ctrl_label,
+            include_rmse=include_rmse_in_legend
+        )
 
         # Extract tracking error (MSE) from info for all trials
         all_errors = []
@@ -738,7 +758,7 @@ def plot_tracking_error_distribution(results_dict, output_dir='./monte_carlo_res
 
         # Plot mean line (using hardware plot styling)
         ax.plot(time, mean_error_m, color=ctrl_color, linewidth=linewidth,
-                label=ctrl_label, alpha=alpha_lines)
+                label=legend_label, alpha=alpha_lines)
 
         # Plot shaded region for ±1 std
         ax.fill_between(time,
@@ -749,7 +769,10 @@ def plot_tracking_error_distribution(results_dict, output_dir='./monte_carlo_res
     # Formatting (matching plot_hardware.py)
     ax.set_xlabel(r'Time (s)')
     ax.set_ylabel(r'Tracking error (m)')
-    ax.legend()
+    if include_rmse_in_legend:
+        ax.legend(loc='upper left', bbox_to_anchor=(0.16, 1.0))
+    else:
+        ax.legend()
     ax.grid()
 
     # Save figure
@@ -770,7 +793,8 @@ def plot_tracking_error_distribution(results_dict, output_dir='./monte_carlo_res
 
 
 def plot_position_distribution(results_dict, output_dir='./monte_carlo_results/normal',
-                               is_constrained=False, constraint_state=-0.8):
+                              is_constrained=False, constraint_state=-0.8,
+                              include_rmse_in_legend=False):
     """Create 2D position plot showing mean trajectory and ±1 std bands for each controller.
 
     Args:
@@ -938,6 +962,12 @@ def plot_position_distribution(results_dict, output_dir='./monte_carlo_results/n
     # Plot each controller's mean trajectory with std bands
     for ctrl_key, ctrl_label, ctrl_color in controllers:
         trajs_data = results_dict[ctrl_key]['trajs_data']
+        legend_label = format_controller_label(
+            results_dict,
+            ctrl_key,
+            ctrl_label,
+            include_rmse=include_rmse_in_legend
+        )
 
         # Extract x and z positions from all trials
         all_x_positions = []
@@ -992,7 +1022,7 @@ def plot_position_distribution(results_dict, output_dir='./monte_carlo_results/n
 
             # Plot mean trajectory (using hardware plot styling)
             ax.plot(mean_x[valid_indices], mean_z[valid_indices],
-                   color=ctrl_color, linewidth=linewidth, label=ctrl_label, alpha=alpha_lines)
+                   color=ctrl_color, linewidth=linewidth, label=legend_label, alpha=alpha_lines)
 
     # Add constraint boundary if in constrained mode
     if is_constrained:
@@ -1008,7 +1038,10 @@ def plot_position_distribution(results_dict, output_dir='./monte_carlo_results/n
     # Formatting (matching plot_hardware.py)
     ax.set_xlabel(r'Position x (m)')
     ax.set_ylabel(r'Position z (m)')
-    ax.legend()
+    if is_constrained:
+        ax.legend(loc='upper left', bbox_to_anchor=(0.16, 1.0))
+    else:
+        ax.legend()
     ax.grid()
 
     # Set reasonable axis limits
@@ -1033,7 +1066,8 @@ def plot_position_distribution(results_dict, output_dir='./monte_carlo_results/n
 
 
 def plot_input_distribution(results_dict, output_dir='./monte_carlo_results/normal',
-                           ctrl_freq=50, is_constrained=False, constraint_input=0.435):
+                           ctrl_freq=50, is_constrained=False, constraint_input=0.435,
+                           include_rmse_in_legend=False):
     """Create plot showing input distribution over time for each controller.
 
     Args:
@@ -1080,6 +1114,12 @@ def plot_input_distribution(results_dict, output_dir='./monte_carlo_results/norm
 
     for ctrl_key, ctrl_label, ctrl_color in controllers:
         trajs_data = results_dict[ctrl_key]['trajs_data']
+        legend_label = format_controller_label(
+            results_dict,
+            ctrl_key,
+            ctrl_label,
+            include_rmse=include_rmse_in_legend
+        )
 
         # Extract actions (inputs) from all trials
         all_thrusts = []
@@ -1114,7 +1154,7 @@ def plot_input_distribution(results_dict, output_dir='./monte_carlo_results/norm
 
         # Plot thrust (top subplot) - using hardware plot styling
         ax[0].plot(time, mean_thrust, color=ctrl_color, linewidth=linewidth,
-                   label=ctrl_label, alpha=alpha_lines)
+                   label=legend_label, alpha=alpha_lines)
         ax[0].fill_between(time,
                           mean_thrust - std_thrust,
                           mean_thrust + std_thrust,
@@ -1122,7 +1162,7 @@ def plot_input_distribution(results_dict, output_dir='./monte_carlo_results/norm
 
         # Plot angle (bottom subplot) - using hardware plot styling
         ax[1].plot(time, mean_angle, color=ctrl_color, linewidth=linewidth,
-                   label=ctrl_label, alpha=alpha_lines)
+                   label=legend_label, alpha=alpha_lines)
         ax[1].fill_between(time,
                           mean_angle - std_angle,
                           mean_angle + std_angle,
@@ -1151,7 +1191,10 @@ def plot_input_distribution(results_dict, output_dir='./monte_carlo_results/norm
 
     ax[1].set_xlabel(r'Time (s)')
     ax[1].set_ylabel(r'Angle $\theta_c$ (rad)')
-    ax[1].legend(loc='upper center', bbox_to_anchor=(0.6, 1.0))
+    if is_constrained:
+        ax[1].legend(loc='upper center', bbox_to_anchor=(0.76, 1.0))
+    else:
+        ax[1].legend(loc='upper center', bbox_to_anchor=(0.6, 1.0))
     ax[1].grid()
 
     # Save figure

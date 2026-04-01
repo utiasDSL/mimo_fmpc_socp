@@ -162,7 +162,8 @@ def detect_experiment_mode(run_dir):
     return 'normal'
 
 
-def regenerate_plots(run_dir, output_dir=None, plot_types=None, ctrl_freq=50):
+def regenerate_plots(run_dir, output_dir=None, plot_types=None, ctrl_freq=50,
+                     legend_rmse=False):
     """Regenerate all plots from saved Monte Carlo results.
 
     Args:
@@ -220,7 +221,12 @@ def regenerate_plots(run_dir, output_dir=None, plot_types=None, ctrl_freq=50):
 
     if 'tracking' in plot_types:
         print('Generating tracking error distribution plot...')
-        plot_tracking_error_distribution(results_dict, str(output_dir), ctrl_freq=ctrl_freq)
+        plot_tracking_error_distribution(
+            results_dict,
+            str(output_dir),
+            ctrl_freq=ctrl_freq,
+            include_rmse_in_legend=legend_rmse
+        )
 
     if 'position' in plot_types:
         print('Generating position distribution plot...')
@@ -228,7 +234,8 @@ def regenerate_plots(run_dir, output_dir=None, plot_types=None, ctrl_freq=50):
             results_dict,
             str(output_dir),
             is_constrained=is_constrained,
-            constraint_state=-0.8
+            constraint_state=-0.8,
+            include_rmse_in_legend=legend_rmse
         )
 
     if 'input' in plot_types:
@@ -238,7 +245,8 @@ def regenerate_plots(run_dir, output_dir=None, plot_types=None, ctrl_freq=50):
             str(output_dir),
             ctrl_freq=ctrl_freq,
             is_constrained=is_constrained,
-            constraint_input=0.435
+            constraint_input=0.435,
+            include_rmse_in_legend=legend_rmse
         )
 
     print(f'\n{"="*80}')
@@ -351,6 +359,12 @@ Examples:
     )
 
     parser.add_argument(
+        '--legend_rmse',
+        action='store_true',
+        help='Append average trajectory RMSE values to legend labels in supported plots'
+    )
+
+    parser.add_argument(
         '--list',
         action='store_true',
         help='List all available Monte Carlo run directories'
@@ -386,7 +400,8 @@ Examples:
             run_dir=run_dir,
             output_dir=args.output_dir,
             plot_types=args.plots,
-            ctrl_freq=args.ctrl_freq
+            ctrl_freq=args.ctrl_freq,
+            legend_rmse=args.legend_rmse
         )
     except Exception as e:
         print(f'\nError: {e}')

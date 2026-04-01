@@ -159,16 +159,10 @@ To train the GPs used by the proposed FMPC+SOCP approach:
 
 ```bash
 cd gp
-python3 fgp_training_data_sim_ext.py
-python3 fgp_training_data_aroundFig8.py
+./generate_data_and_train_flat_gps.sh
 ```
 
-To train the GPs afterwards:
-```bash
-python3 training_flat_gps.py
-```
-
-**Note:** Adjust line 242 in `training_flat_gps.py` to train the first or second GP (the system uses two independent GPs for the two flat input dimensions).
+The flat-GP regeneration wrapper trains `gp_v0` for `5000` iterations with `--initial_noise 8`, and `gp_v1` for `2000` iterations. The controller loads the saved models from `gp/fgp/gp_v0` and `gp/fgp/gp_v1`.
 
 ### Training GPMPC GPs
 

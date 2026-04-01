@@ -257,6 +257,7 @@ class LinearMPC(MPC):
             self.u_prev = u_val
             self.results_dict['horizon_states'].append(deepcopy(self.x_prev) + self.X_EQ[:, None])
             self.results_dict['horizon_inputs'].append(deepcopy(self.u_prev) + self.U_EQ[:, None])
+            self.results_dict['goal_states'].append(deepcopy(goal_states))
             self.results_dict['mpc_solve_time'].append(mpc_solve_time)
         except RuntimeError:
             mpc_solve_time = time() - mpc_solve_start
